@@ -12,23 +12,24 @@ This module implements classes related to time definitions.
 """
 # TODO: Find whether (part of) this functionality is already provided by
 # Python libraries.
+# ...Yes, it is. See the `datetime', `calendar' and `time' standard libraries.
 
 
-class TimeSpan():
-    pass
+# class TimeSpan():
+#     pass
 
 
-class Instant():
-    pass
+# class Instant():
+#     pass
 
 
 class WorkSlot(TimeSpan):
-    pass
-
-
-class Timezone():
-    pass
-
-
-class Day(TimeSpan):
+    """ This shall be a time span (or `timedelta' in Python terminology) with
+    the annotation saying how it was spent. It shall link to the relevant task
+    (or, perhaps, a list of concurrently performed tasks). The annotations
+    should include facts like start time, end time, concentration devoted to
+    the task (may be in relation to the number of simultaneously performed
+    tasks), comments, state of the task before and after this work slot.
+    """
+    raise NotImplementedError("WorkSlot needs to be implemented yet.")
     pass
