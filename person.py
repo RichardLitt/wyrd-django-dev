@@ -29,6 +29,7 @@ class Person():
     Wyrd In too, they should have many fields hidden to the local user. Sharing
     of personal data shall be configurable by each user and have rather
     restrictive default setting.
+
     """
     raise NotImplementedError("Person needs to be implemented yet.")
     pass

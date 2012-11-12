@@ -30,6 +30,7 @@ class WorkSlot(TimeSpan):
     should include facts like start time, end time, concentration devoted to
     the task (may be in relation to the number of simultaneously performed
     tasks), comments, state of the task before and after this work slot.
+
     """
     raise NotImplementedError("WorkSlot needs to be implemented yet.")
     pass

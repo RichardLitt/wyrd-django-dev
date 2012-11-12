@@ -27,6 +27,7 @@ class Scheduler():
     set of tasks should cause only a local change in the schedule. Moreover,
     many transitions (such as completing the current task) can be guessed, and
     their effect on the schedule can (and should) be precomputed.
+
     """
     raise NotImplementedError("Scheduler needs to be implemented yet.")
     pass
@@ -36,6 +37,19 @@ class Schedule():
     """
     This is the result of Scheduler's work. The format and interface have to be
     determined yet.
+
     """
     raise NotImplementedError("Schedule needs to be implemented yet.")
     pass
+
+
+class ScheduleRestrictions()
+    """
+    Objects of this class represent restrictions on a schedule. This object
+    will be used in the notorious scenario of scheduling for the current day,
+    when the user specifies what tasks he wants to work on, and this selection
+    of tasks will be scheduled somehow by the scheduler (perhaps using
+    RandomScheduler, or NoneScheduler to produce just the set of tasks). The
+    selection of tasks is what is represented by this class.
+
+    """

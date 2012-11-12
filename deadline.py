@@ -21,6 +21,7 @@ class Deadline():
     of each deadline (how it was originally specified and later shifted,
     modified or cancelled, potentially also who shifted, modified or cancelled
     it) should be also stored.
+
     """
     raise NotImplementedError("Deadline needs to be implemented yet.")
     pass

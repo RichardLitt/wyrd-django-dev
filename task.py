@@ -21,6 +21,7 @@ class Theme():
     generating reports. If each goal is assigned to related themes, the user
     can have a report generated that states how much time he/she spent on
     different themes.
+
     """
     raise NotImplementedError("Theme needs to be implemented yet.")
     pass
@@ -35,6 +36,7 @@ class Goal():
     level. Goals are achieved by following (a sequence of) plans. There are
     usually multiple plans that can be chosen to achieve a goal. Goals can
     also involve subgoals, i.e. other objects of this class.
+
     """
     raise NotImplementedError("Goal needs to be implemented yet.")
     pass
@@ -58,6 +60,7 @@ class Plan():
     until the goal is reached.
 
     Plans are composed of tasks (as far as I can see).
+
     """
     raise NotImplementedError("Plan needs to be implemented yet.")
     pass
@@ -76,6 +79,7 @@ class Task():
     account for tasks such as ``Take a pill P each Monday and Thursday after
     breakfast.'' or ``Buy and paint eggs two weeks before Easter except for
     leap years.''
+
     """
     raise NotImplementedError("Task needs to be implemented yet.")
     pass
@@ -93,6 +97,7 @@ class Event():
     """
     This class represents a one-time event in the real world in the broadest
     sense.
+
     """
     raise NotImplementedError("Event needs to be implemented yet.")
     pass
