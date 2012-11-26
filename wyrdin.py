@@ -11,14 +11,21 @@ https://github.com/WyrdIn
 
 import argparse
 # from .backend import csv as backend
+# FIXME Decide which of the backends should be imported when.
 import csv
+import datetime
 import os.path
+import pickle
+
+from worktime import WorkSlot
+
 
 # Public fields and methods.
 __all__ = []
 
 # Constants
 FTYPE_CSV = 0
+FTYPE_PICKLE = 1
 
 # Variables
 session = None
@@ -41,14 +48,16 @@ class Session(object):
         # Set the default configuration.
         self.config = dict()
         self.config['CFG_PROJECTS_FNAME'] = 'projects.lst'
-        self.config['CFG_TASKS_FNAME'] = 'tasks.csv'
-        self.config['CFG_TASKS_FTYPE'] = FTYPE_CSV
+        self.config['CFG_TASKS_FNAME'] = 'tasks.pkl'
+        self.config['CFG_TASKS_FTYPE'] = FTYPE_PICKLE
+        self.config['CFG_LOG_FNAME'] = 'timelog.pkl'
+        self.config['CFG_LOG_FTYPE'] = FTYPE_PICKLE
         # Initialise fields.
+        self.projects = []
         # TODO Devise a more suitable data structure to keep tasks in
         # memory.
-        # FIXME: Currently, tasks are just lists of values. They should be
-        # task.Task instead.
         self.tasks = []
+        self.wtimes = []
 
     def read_config(self, cl_args):
         """ Finds all relevant configuration files, reads them and acts
@@ -76,11 +85,14 @@ class Session(object):
         if infname is None:
             infname = self.config['CFG_PROJECTS_FNAME']
         with open(infname) as infile:
-            self.projects = sorted([proj.rstrip('\n\r') for proj in infile])
+            self.projects = sorted([proj.rstrip('\n') for proj in infile])
 
     def write_projects(self, outfname=None):
-        """
-        TODO: Write docstring.
+        """Writes the list of projects into a file.
+
+        In the current implementation, simply writes out an alphabetically
+        sorted list of all known projects to the file.
+
         """
         if outfname is None:
             outfname = self.config['CFG_PROJECTS_FNAME']
@@ -105,9 +117,20 @@ class Session(object):
             with open(infname, newline='') as infile:
                 taskreader = csv.reader(infile)
                 self.tasks = [task for task in taskreader]
+        elif inftype == FTYPE_PICKLE:
+            if not os.path.exists(infname):
+                open(infname, 'wb').close()
+            with open(infname, 'rb') as infile:
+                self.tasks = []
+                while True:
+                    try:
+                        task = pickle.load(infile)
+                        self.tasks.append(task)
+                    except EOFError:
+                        break
         else:
-            raise NotImplementedError("Session.read_tasks() is implemented "\
-                                      "only for CSV files.")
+            raise NotImplementedError("Session.read_tasks() is not " + \
+                                      "implemented for this type of files.")
 
     def write_tasks(self, outfname=None, outftype=None):
         """
@@ -124,9 +147,53 @@ class Session(object):
                 taskwriter = csv.writer(outfile)
                 for task in self.tasks:
                     taskwriter.writerow(task)
+        elif outftype == FTYPE_PICKLE:
+            with open(outfname, 'wb') as outfile:
+                for task in self.tasks:
+                    pickle.dump(task, outfile)
         else:
-            raise NotImplementedError("Session.write_tasks() is implemented "\
-                                      "only for CSV files.")
+            raise NotImplementedError("Session.write_tasks() is not " + \
+                                      "implemented for this type of files.")
+
+    def read_log(self, infname=None, inftype=None):
+        """Reads the log of how time was spent."""
+        # TODO: Think of when this really has to be done, and when only
+        # a subset of the log needs to be read. In the latter case, allow for
+        # doing so.
+        if infname is None:
+            infname = self.config['CFG_LOG_FNAME']
+            inftype = self.config['CFG_LOG_FTYPE']
+        if inftype == FTYPE_PICKLE:
+            if not os.path.exists(infname):
+                open(infname, 'wb').close()
+            with open(infname, 'rb') as infile:
+                self.wtimes = []
+                while True:
+                    try:
+                        worktime = pickle.load(infile)
+                        self.wtimes.append(worktime)
+                    except EOFError:
+                        break
+        else:
+            raise NotImplementedError("Session.read_log() is not " + \
+                                      "implemented for this type of files.")
+
+    def write_log(self, outfname=None, outftype=None):
+        """TODO: Update docstring."""
+        if outfname is None:
+            outfname = self.config['CFG_LOG_FNAME']
+            outftype = self.config['CFG_LOG_FTYPE']
+        if outftype == FTYPE_PICKLE:
+            with open(outfname, 'wb') as outfile:
+                for wtime in self.wtimes:
+                    pickle.dump(wtime, outfile)
+        else:
+            raise NotImplementedError("Session.write_log() is not " + \
+                                      "implemented for this type of files.")
+
+    def find_open_slots(self):
+        """Returns work slots that are currently open."""
+        return [slot for slot in self.wtimes if slot.end is None]
 
 
 def _init_argparser(arger):
@@ -140,39 +207,64 @@ def _init_argparser(arger):
 
     # help
     arger_help = subargers.add_parser('help', help="Prints out this message.")
-    arger_help.set_defaults(func=_print_help)
+    arger_help.set_defaults(func=print_help)
 
     # begin
     arger_begin = subargers.add_parser('begin',
+                                       aliases=['b'],
                                        help="To start working on a task.")
-    arger_begin.set_defaults(func=_begin)
+    arger_begin.set_defaults(func=begin)
+    arger_begin.add_argument('-a', '--adjust',
+                             default=0,
+                             metavar='MIN',
+                             help="Adjust the beginning time by " + \
+                                  "subtracting this much.",
+                             type=int)
 
     # end
     arger_end = subargers.add_parser(
         'end',
+        aliases=['e'],
         help="When you have finished/interrupted work on a task.")
-    arger_end.set_defaults(func=_end)
+    arger_end.set_defaults(func=end)
+    arger_end.add_argument('-a', '--adjust',
+                           default=0,
+                           metavar='MIN',
+                           help="Adjust the end time by subtracting " + \
+                               "this much.",
+                           type=int)
 
     # retro (renamed from fence)
     arger_retro = subargers.add_parser('retro',
                                        help="Retrospective recording of work.")
-    arger_retro.set_defaults(func=_retro)
+    arger_retro.set_defaults(func=retro)
 
     # status (merged with state)
     arger_status = subargers.add_parser('status',
                                         help="Prints out the current status "\
                                              "info.")
-    arger_status.set_defaults(func=_status)
+    arger_status.set_defaults(func=status)
 
     # projects (renamed from topics)
     arger_projects = subargers.add_parser('projects',
                                           aliases=['p', 'proj'],
                                           help="Show info about projects.")
-    arger_projects.set_defaults(func=_projects)
+    arger_projects.set_defaults(func=projects)
     arger_projects.add_argument('-a', '--add', action='store_true',
                                 help="Add a new project.")
     arger_projects.add_argument('-l', '--list', action='store_true',
                                 help="List defined projects.")
+
+    # tasks (instead of editing the tasks store directly)
+    arger_projects = subargers.add_parser('tasks',
+                                          aliases=['t', 'tasks'],
+                                          help="Show info about tasks.")
+    arger_projects.set_defaults(func=tasks)
+    arger_projects.add_argument('-a', '--add', action='store_true',
+                                help="Add a new task.")
+    arger_projects.add_argument('-l', '--list', action='store_true',
+                                help="List defined tasks.")
+
     return arger
 
 
@@ -184,53 +276,79 @@ def _process_args(arger):
 
 
 # Subcommand functions.
-def _print_help(args):
+def print_help(args):
     args.arger.print_help()
 
 
-def _begin(args):
-    raise NotImplementedError("The subcommand 'begin' is not implemented yet.")
-    pass
+def begin(args):
+    start = datetime.datetime.now() - datetime.timedelta(minutes=args.adjust)
+    task = frontend.get_task(session)
+    session.wtimes.append(WorkSlot(task=task, start=start))
+    return 0
 
 
-def _end(args):
-    raise NotImplementedError("The subcommand 'end' is not implemented yet.")
-    pass
+def end(args):
+    end = datetime.datetime.now() - datetime.timedelta(minutes=args.adjust)
+    open_slots = session.find_open_slots()
+    if not open_slots:
+        print("You have not told me you have been doing something. Use " + \
+              "`begin' or `retro'.")
+        return 1
+    if len(open_slots) == 1:
+        task = open_slots[0]
+    else:
+        task = frontend.get_task(session,
+                                 map(lambda slot: slot.task, open_slots))
+    session.wtimes.append(WorkSlot(task=task, end=end))
+    return 0
 
 
-def _retro(args):
+def retro(args):
     raise NotImplementedError("The subcommand 'retro' is not implemented yet.")
     pass
 
 
-def _status(args):
+def status(args):
     raise NotImplementedError("The subcommand 'status' is not implemented "\
                               "yet.")
     pass
 
 
-def _projects(args):
+def projects(args):
     was_output = False  # whether there has been any output from this function
                         # so far
     if args.list:
-        print("List of current projects:")
-        for project in sorted(session.projects):
-            print("    {}".format(project))
-        print(" --- end of list --- ")
+        frontend.list_projects(session)
         was_output = True
     if args.add:
         if was_output:
             print("")
         print("Adding a project...")
-        project = input("Specify the project name: ")
+        print("Specify the project name: ")
+        project = input("> ")
         while project in session.projects:
-            project = input("Sorry, this project name is already used. "\
-                            "Try again: ")
+            print("Sorry, this project name is already used.  Try again: ")
+            project = input("> ")
         session.projects.append(project)
         print("The project '{}' has been added successfully.".format(project))
 #     if args.something_else:
 #         raise NotImplementedError("This action for the subcommand "\
 #                                   "'projects' is not implemented yet.")
+
+
+def tasks(args):
+    was_output = False  # whether there has been any output from this function
+                        # so far
+    if args.list:
+        frontend.list_tasks(session)
+        was_output = True
+    if args.add:
+        if was_output:
+            print("")
+        print("Adding a task...")
+        task = frontend.get_task(session)
+        session.tasks.append(task)
+        print("The task '{}' has been added successfully.".format(task))
 
 
 # The main program loop.
@@ -245,11 +363,16 @@ if __name__ == "__main__":
     # Read data.
     session.read_projects()
     session.read_tasks()
+    session.read_log()
 
+    import frontend.cli as frontend
     # Perform commands.
     # FIXME: As seen, it does not work in a loop yet.
-    _cl_args.func(_cl_args)
+    ret = _cl_args.func(_cl_args)
+    if ret == 0:
+        print("Done.")
 
     # Write data on exit.
+    session.write_log()
     session.write_tasks()
     session.write_projects()

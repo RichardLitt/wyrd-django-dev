@@ -23,8 +23,9 @@ class Theme():
     different themes.
 
     """
-    raise NotImplementedError("Theme needs to be implemented yet.")
-    pass
+
+    def __init__(self):
+        raise NotImplementedError("Theme needs to be implemented yet.")
 
 
 class Goal():
@@ -38,8 +39,9 @@ class Goal():
     also involve subgoals, i.e. other objects of this class.
 
     """
-    raise NotImplementedError("Goal needs to be implemented yet.")
-    pass
+
+    def __init__(self):
+        raise NotImplementedError("Goal needs to be implemented yet.")
 
 
 class Plan():
@@ -62,8 +64,9 @@ class Plan():
     Plans are composed of tasks (as far as I can see).
 
     """
-    raise NotImplementedError("Plan needs to be implemented yet.")
-    pass
+
+    def __init__(self):
+        raise NotImplementedError("Plan needs to be implemented yet.")
 
 
 class Task():
@@ -81,16 +84,26 @@ class Task():
     leap years.''
 
     """
-    raise NotImplementedError("Task needs to be implemented yet.")
-    pass
+
+    def __init__(self, name, project):
+        self.name = name
+        if project:
+            self.project = project
+        # Empty-string projects are treated as no project.
+        else:
+            self.project = None
+
+    def __str__(self):
+        return "{name} ({proj})".format(name=self.name, proj=self.project)
 
 
 class State():
     """
     This class represents a state of the world in the broadest sense.
     """
-    raise NotImplementedError("State needs to be implemented yet.")
-    pass
+
+    def __init__(self):
+        raise NotImplementedError("State needs to be implemented yet.")
 
 
 class Event():
@@ -99,5 +112,6 @@ class Event():
     sense.
 
     """
-    raise NotImplementedError("Event needs to be implemented yet.")
-    pass
+
+    def __init__(self):
+        raise NotImplementedError("Event needs to be implemented yet.")

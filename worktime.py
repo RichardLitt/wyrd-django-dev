@@ -10,6 +10,9 @@ https://github.com/WyrdIn
 This module implements classes related to time definitions.
 
 """
+import datetime
+from task import Task
+
 # TODO: Find whether (part of) this functionality is already provided by
 # Python libraries.
 # ...Yes, it is. See the `datetime', `calendar' and `time' standard libraries.
@@ -23,7 +26,7 @@ This module implements classes related to time definitions.
 #     pass
 
 
-class WorkSlot(TimeSpan):
+class WorkSlot(object):
     """ This shall be a time span (or `timedelta' in Python terminology) with
     the annotation saying how it was spent. It shall link to the relevant task
     (or, perhaps, a list of concurrently performed tasks). The annotations
@@ -32,5 +35,8 @@ class WorkSlot(TimeSpan):
     tasks), comments, state of the task before and after this work slot.
 
     """
-    raise NotImplementedError("WorkSlot needs to be implemented yet.")
-    pass
+
+    def __init__(self, task, start=None, end=None):
+        self.start = start
+        self.end = end
+        self.task = task
