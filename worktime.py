@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 #-*- coding: utf-8 -*-
-# This code is PEP8-compliant. See http://www.python.org/dev/peps/pep-0008/.
+# This code is mostly PEP8-compliant. See
+# http://www.python.org/dev/peps/pep-0008/.
 """
 
 Wyrd In: Time tracker and task manager
@@ -10,46 +11,115 @@ https://github.com/WyrdIn
 This module implements classes related to time definitions.
 
 """
-import datetime
-# from task import Task
+import re
+from datetime import datetime, timedelta
 
-# TODO: Find whether (part of) this functionality is already provided by
-# Python libraries.
-# ...Yes, it is. See the `datetime', `calendar' and `time' standard libraries.
-
-
-# class TimeSpan():
-#     pass
-
-
-# class Instant():
-#     pass
-
-zero_delta = datetime.timedelta()
+# Constants.
+zero_delta = timedelta()
+_dashes = re.compile('-+')
 
 
 def parse_delta(timestr):
     """ Parses a string into a timedelta object.
 
-    Currently merely interprets the string as an integral number of minutes.
+    Currently merely interprets the string as a floating point number of
+    minutes.
 
     """
     # TODO Crude NLP.
-    return datetime.timedelta(minutes=int(timestr))
+    return timedelta(minutes=float(timestr))
 
 
-def parse_datetime(datetimestr):
+def parse_datetime(dtstr):
     """ Parses a string into a datetime object.
 
-    Currently merely interprets the string as an integral number of days from
-    now.
+    Currently merely interprets the string as a floating point number of days
+    from now.
 
     """
     # TODO Crude NLP.
-    return datetime.datetime.now() + datetime.timedelta(days=int(datetimestr))
+    return datetime.now() + timedelta(days=float(dtstr))
 
 
-class WorkSlot(object):
+def daystart(dt=lambda: datetime.now()):
+    return dt.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def dayend(dt=lambda: datetime.now()):
+    return dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+
+def parse_interval(ivalstr):
+    """ Parses a string into an Interval object."""
+    now = datetime.now()
+    # Try to use some keywords.
+    keywords = {'today': (daystart(now), dayend(now))}
+    ivalstr = ivalstr.strip()
+    if ivalstr.lower() in keywords:
+        start, end = keywords[ivalstr.lower()]
+        return Interval(start, end)
+
+    # Parse the interval in the form A--B.
+    start, end = _dashes.split(ivalstr.strip(), 2)
+    start = parse_datetime(start) if start else None
+    end = parse_datetime(end) if end else None
+    return Interval(start, end)
+
+
+class Interval(object):
+    """ Represents a time interval -- not just its length, but also its
+    absolute position (start and end times).
+
+    """
+
+    def __init__(self, start=None, end=None):
+        """Initialises the object."""
+        if not (start is None or isinstance(start, datetime)) \
+           or not (end is None or isinstance(end, datetime)):
+            raise TypeError('The `start\' and `end\' arguments have to be'
+                            'a `datetime\' instance or None.')
+        if start and end and start > end:
+            raise ValueError('Start must be earlier than end.')
+        self.start = start
+        self.end = end
+
+    def __str__(self):
+        return '{start!s}--{end!s}'.format(start=self.start,
+                                           end=self.end)
+
+    @property
+    def length(self):
+        if self.start is None or self.end is None:
+            return timedelta.max
+        return self.end - self.start
+
+    @length.setter
+    def length(self, newlength):
+        if self.start is None and self.end is None:
+            raise ValueError('Cannot set the length for an unbound interval.')
+        if self.start is None:
+            self.start = self.end - newlegth
+        else:
+            self.end = self.start + newlength
+
+    def intersects(self, other):
+        start_after_other_end = self.start is not None \
+                                and other.end is not None \
+                                and self.start > other.end
+        end_before_other_start = self.end is not None \
+                                 and other.start is not None \
+                                 and self.end < other.start
+        return not start_after_other_end and not end_before_other_start
+
+    def includes(self, dt):
+        return (self.start is None or self.start <= dt) and \
+               (self.end is None or self.end >= dt)
+
+    def iscurrent(self):
+        return self.includes(datetime.now())
+
+
+class WorkSlot(Interval):
     """ This shall be a time span (or `timedelta' in Python terminology) with
     the annotation saying how it was spent. It shall link to the relevant task
     (or, perhaps, a list of concurrently performed tasks). The annotations
@@ -60,20 +130,13 @@ class WorkSlot(object):
     """
 
     def __init__(self, task, start=None, end=None):
-        self.start = start
-        self.end = end
+        super().__init__(start, end)
         self.task = task
 
     def __str__(self):
-        return "<WorkSlot: {task}, {start}--{end}>".format(
+        return "<WorkSlot: {task}, {invl}>".format(
             task=self.task,
-            start=self.start,
-            end=self.end)
+            invl=super().__str__())
 
     def __repr__(self):
         return self.__str__()
-
-    def iscurrent(self):
-        return (self.start and \
-                (not self.end or \
-                    (self.end - datetime.datetime.now() > zero_delta)))

@@ -9,13 +9,15 @@ https://github.com/WyrdIn
 
 """
 
+# TODO: today (list of all tasks/projects/workslots)
+
 import argparse
 import datetime
 import os.path
 import pickle
 
 from util import format_timedelta, group_by
-from worktime import WorkSlot
+from worktime import WorkSlot, parse_interval
 
 
 # Public fields and methods.
@@ -260,6 +262,13 @@ def _init_argparser(arger):
                                         help="Prints out the current status "\
                                              "info.")
     arger_status.set_defaults(func=status)
+    arger_status.add_argument('-t', '--time',
+                              type=parse_interval,
+                              action='append',
+                              help="Filter work slots by time.")
+    arger_status.add_argument('-a', '--all',
+                              action='store_true',
+                              help="Include also closed slots.")
 
     # projects (renamed from topics)
     arger_projects = subargers.add_parser('projects',
@@ -357,25 +366,40 @@ def retro(args):
 
 
 def status(args):
-    # Select work slots currently open.
-    openslots = [slot for slot in session.wtimes if slot.iscurrent()]
+    # Transform selection criteria into test functions.
+    if args.time:
+        filter_time = lambda slot: \
+            all(filter(lambda invl: slot.intersects(invl), args.time))
+    else:
+        filter_time = True
+    if not args.all:
+        filter_open = lambda slot: slot.iscurrent()
+    else:
+        filter_open = True
+    # Select work slots matching the selection criteria..
+    slots = [slot for slot in session.wtimes \
+             if filter_time(slot) and filter_open(slot)]
 
-    if not openslots:
+    if not slots:
+        # FIXME Update the message.
         print("You don't seem to be working now.")
     else:
+        # FIXME Update the message.
         print("You have been working on the following tasks:")
         now = datetime.datetime.now()
-        task2slot = group_by(openslots, "task", single_attr=True)
+        task2slot = group_by(slots, "task", single_attr=True)
         for task in task2slot:
             task_slots = task2slot[task]
             # Expected case: only working once on the task in parallel:
             if len(task_slots) == 1:
-                time_spent = format_timedelta(now - task_slots[0].start)
+                end = task_slots[0].end or now
+                time_spent = format_timedelta(end - task_slots[0].start)
                 print("\t{time: >18}: {task}".format(task=task.name,
                                                      time=time_spent))
             else:
                 for slot in task_slots:
-                    time_spent = format_timedelta(now - slot.start)
+                    end = slot.end or now
+                    time_spent = format_timedelta(end - slot.start)
                     print("M\t{time: >18}: {task}".format(task=task.name,
                                                           time=time_spent))
     return 0
