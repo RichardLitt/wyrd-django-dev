@@ -25,6 +25,8 @@ import datetime
 # class Instant():
 #     pass
 
+zero_delta = datetime.timedelta()
+
 
 def parse_delta(timestr):
     """ Parses a string into a timedelta object.
@@ -73,4 +75,5 @@ class WorkSlot(object):
 
     def iscurrent(self):
         return (self.start and \
-                (not self.end or (self.end - datetime.datetime.now() > 0)))
+                (not self.end or \
+                    (self.end - datetime.datetime.now() > zero_delta)))

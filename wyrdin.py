@@ -8,11 +8,10 @@ CC-Share Alike 2012 © The Wyrd In team
 https://github.com/WyrdIn
 
 """
+# TODO removing tasks
+# TODO removing projects
 
 import argparse
-# from .backend import csv as backend
-# FIXME Decide which of the backends should be imported when.
-import csv
 import datetime
 import os.path
 import pickle
@@ -115,6 +114,7 @@ class Session(object):
             inftype = self.config['CFG_TASKS_FTYPE']
         # This is a primitive implementation for the backend as a CSV.
         if inftype == FTYPE_CSV:
+            import csv
             # Read the tasks from the file to the memory.
             with open(infname, newline='') as infile:
                 taskreader = csv.reader(infile)
@@ -145,6 +145,7 @@ class Session(object):
             outfname = self.config['CFG_TASKS_FNAME']
             outftype = self.config['CFG_TASKS_FTYPE']
         if outftype == FTYPE_CSV:
+            import csv
             with open(outfname, newline='') as outfile:
                 taskwriter = csv.writer(outfile)
                 for task in self.tasks:
@@ -264,9 +265,20 @@ def _init_argparser(arger):
                                        aliases=['t', 'tasks'],
                                        help="Show info about tasks.")
     arger_tasks.set_defaults(func=tasks)
-    arger_tasks.add_argument('-a', '--add', action='store_true',
+    arger_tasks.add_argument('-a', '--add',
+                             dest='subcmd',
+                             action='store_const',
+                             const='add',
                              help="Add a new task.")
-    arger_tasks.add_argument('-l', '--list', action='store_true',
+    arger_tasks.add_argument('-r', '--remove',
+                             dest='subcmd',
+                             action='store_const',
+                             const='remove',
+                             help="Remove an existing task.")
+    arger_tasks.add_argument('-l', '--list',
+                             dest='subcmd',
+                             action='store_const',
+                             const='list',
                              help="List defined tasks.")
     arger_tasks.add_argument('-v', '--verbose', action='store_true',
                              help="Be verbose.")
@@ -288,25 +300,30 @@ def print_help(args):
 
 
 def begin(args):
-    start = datetime.datetime.now() - datetime.timedelta(minutes=args.adjust)
     task = frontend.get_task(session)
+    start = datetime.datetime.now() - datetime.timedelta(minutes=args.adjust)
     session.wtimes.append(WorkSlot(task=task, start=start))
     return 0
 
 
 def end(args):
-    end = datetime.datetime.now() - datetime.timedelta(minutes=args.adjust)
+    now = datetime.datetime.now() - datetime.timedelta(minutes=args.adjust)
     open_slots = session.find_open_slots()
     if not open_slots:
         print("You have not told me you have been doing something. Use " + \
               "`begin' or `retro'.")
         return 1
+    # If currently working on a single task (once at a time), assume it is that
+    # one to be ended.
     if len(open_slots) == 1:
         task = open_slots[0]
+    # If more tasks are currently open, let the user specify which one is to be
+    # ended.
     else:
         task = frontend.get_task(session,
                                  map(lambda slot: slot.task, open_slots))
-    session.wtimes.append(WorkSlot(task=task, end=end))
+    for slot in filter(lambda slot: slot.task == task, open_slots):
+        slot.end = now
     return 0
 
 
@@ -364,18 +381,30 @@ def projects(args):
 
 
 def tasks(args):
-    was_output = False  # whether there has been any output from this function
-                        # so far
-    if args.list:
+
+    # Define subcommand functions.
+    def list():
         frontend.list_tasks(session, verbose=args.verbose)
-        was_output = True
-    if args.add:
-        if was_output:
-            print("")
+
+    def add():
         print("Adding a task...")
         task = frontend.get_task(session)
         session.tasks.append(task)
         print("The task '{}' has been added successfully.".format(task))
+
+    def remove():
+        print("Removing a task...")
+        task = frontend.get_task(session, session.tasks)
+        session.tasks.remove(task)
+        print("The task '{}' has been removed successfully.".format(task))
+
+    try:
+        # Call the subcommand function.
+        locals()[args.subcmd]()
+    except KeyError:
+        raise NotImplementedError(
+            'The subcommand `{sub!s}\' is not implemented.'\
+            .format(sub=args.subcmd))
     return 0
 
 

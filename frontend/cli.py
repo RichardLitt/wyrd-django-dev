@@ -8,6 +8,8 @@ CC-Share Alike 2012 © The Wyrd In team
 https://github.com/WyrdIn
 
 """
+from collections import Mapping
+
 from worktime import parse_delta, parse_datetime
 from task import Task
 
@@ -44,19 +46,19 @@ class Cli(object):
             # representation.
             task_str = str(a_task)
             str2task[task_str] = a_task
-            int2task[task_index] = a_task
+            int2task[str(task_index)] = a_task
         if restricted:
-            Cli.choosefrom(str2task.keys())
+            Cli.choosefrom(int2task)
 
         shown_selection = False
         taskname = input("> ")
         while not taskname or taskname == "?":
             if restricted:
-                Cli.choosefrom(str2task.keys())
+                Cli.choosefrom(int2task)
             else:
                 if selection:
                     shown_selection = True
-                    Cli.choosefrom(str2task.keys(),
+                    Cli.choosefrom(int2task,
                                    msg="You can choose from the " + \
                                        "existing tasks:")
                 else:
@@ -67,7 +69,7 @@ class Cli(object):
             # Find the Task task.
             while taskname not in str2task and taskname not in int2task:
                 if not taskname or taskname == "?":
-                    Cli.choosefrom(str2task.keys())
+                    Cli.choosefrom(int2task)
                 else:
                     print("Sorry, this task was not on the menu. Try again.")
                 taskname = input("> ")
@@ -99,8 +101,23 @@ class Cli(object):
     @staticmethod
     def choosefrom(selection, msg="Choose from the following list:"):
         print(msg)
-        for index, item in enumerate(selection):
-            print ("    {idx: >4d} {item!s}".format(idx=index, item=item))
+        # Find what indexing to use for the selection.
+        numbered_map = None
+        if isinstance(selection, Mapping):
+            try:
+                sorted_keys = sorted(selection, key=int)
+            except ValueError:
+                try:
+                    sorted_keys = sorted(selection)
+                except KeyError:
+                    numbered_map = selection
+        else:
+            numbered_map = enumerate(selection)
+        if numbered_map is None:
+            numbered_map = ((key, selection[key]) for key in sorted_keys)
+        # Print the selection.
+        for index, item in numbered_map:
+            print ("    {idx: >4} {item!s}".format(idx=index, item=item))
         print("")
 
     @staticmethod
@@ -147,9 +164,9 @@ class Cli(object):
 
     @staticmethod
     def list_tasks(session, verbose=False):
+        # TODO Say when the tasks were worked on.
         print("List of current tasks:")
         if verbose:
-            # TODO Implement verbosity here.
             for task in sorted(session.tasks):
                 print("    {}".format(task.name))
                 for attr in task.__dict__:

@@ -52,6 +52,9 @@ class Goal():
     def __lt__(self, other):
         return self.name < other.name
 
+    def __hash__(self):
+        return id(self)
+
 
 @total_ordering
 class Plan():
@@ -84,6 +87,9 @@ class Plan():
     def __lt__(self, other):
         return self.name < other.name
 
+    def __hash__(self):
+        return id(self)
+
 
 @total_ordering
 class Task():
@@ -115,6 +121,9 @@ class Task():
 
     def __lt__(self, other):
         return str(self) < str(other)
+
+    def __hash__(self):
+        return id(self)
 
     def __str__(self):
         return "{name} ({proj})".format(name=self.name, proj=self.project)
