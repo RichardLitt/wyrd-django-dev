@@ -17,6 +17,7 @@ import datetime
 import os.path
 import pickle
 
+from util import format_timedelta, group_by
 from worktime import WorkSlot
 
 
@@ -52,6 +53,7 @@ class Session(object):
         self.config['CFG_TASKS_FTYPE'] = FTYPE_PICKLE
         self.config['CFG_LOG_FNAME'] = 'timelog.pkl'
         self.config['CFG_LOG_FTYPE'] = FTYPE_PICKLE
+        self.config['CFG_TIME_FORMAT'] = '%d %b %Y %H:%M:%S'
         # Initialise fields.
         self.projects = []
         # TODO Devise a more suitable data structure to keep tasks in
@@ -231,7 +233,7 @@ def _init_argparser(arger):
                            default=0,
                            metavar='MIN',
                            help="Adjust the end time by subtracting " + \
-                               "this much.",
+                                "this much.",
                            type=int)
 
     # retro (renamed from fence)
@@ -254,16 +256,20 @@ def _init_argparser(arger):
                                 help="Add a new project.")
     arger_projects.add_argument('-l', '--list', action='store_true',
                                 help="List defined projects.")
+    arger_projects.add_argument('-v', '--verbose', action='store_true',
+                                help="Be verbose.")
 
     # tasks (instead of editing the tasks store directly)
-    arger_projects = subargers.add_parser('tasks',
-                                          aliases=['t', 'tasks'],
-                                          help="Show info about tasks.")
-    arger_projects.set_defaults(func=tasks)
-    arger_projects.add_argument('-a', '--add', action='store_true',
-                                help="Add a new task.")
-    arger_projects.add_argument('-l', '--list', action='store_true',
-                                help="List defined tasks.")
+    arger_tasks = subargers.add_parser('tasks',
+                                       aliases=['t', 'tasks'],
+                                       help="Show info about tasks.")
+    arger_tasks.set_defaults(func=tasks)
+    arger_tasks.add_argument('-a', '--add', action='store_true',
+                             help="Add a new task.")
+    arger_tasks.add_argument('-l', '--list', action='store_true',
+                             help="List defined tasks.")
+    arger_tasks.add_argument('-v', '--verbose', action='store_true',
+                             help="Be verbose.")
 
     return arger
 
@@ -278,6 +284,7 @@ def _process_args(arger):
 # Subcommand functions.
 def print_help(args):
     args.arger.print_help()
+    return 0
 
 
 def begin(args):
@@ -309,16 +316,35 @@ def retro(args):
 
 
 def status(args):
-    raise NotImplementedError("The subcommand 'status' is not implemented "\
-                              "yet.")
-    pass
+    # Select work slots currently open.
+    openslots = [slot for slot in session.wtimes if slot.iscurrent()]
+
+    if not openslots:
+        print("You don't seem to be working now.")
+    else:
+        print("You have been working on the following tasks:")
+        now = datetime.datetime.now()
+        task2slot = group_by(openslots, "task", single_attr=True)
+        for task in task2slot:
+            task_slots = task2slot[task]
+            # Expected case: only working once on the task in parallel:
+            if len(task_slots) == 1:
+                time_spent = format_timedelta(now - task_slots[0].start)
+                print("\t{time: >18}: {task}".format(task=task.name,
+                                                     time=time_spent))
+            else:
+                for slot in task_slots:
+                    time_spent = format_timedelta(now - slot.start)
+                    print("M\t{time: >18}: {task}".format(task=task.name,
+                                                          time=time_spent))
+    return 0
 
 
 def projects(args):
     was_output = False  # whether there has been any output from this function
                         # so far
     if args.list:
-        frontend.list_projects(session)
+        frontend.list_projects(session, args.verbose)
         was_output = True
     if args.add:
         if was_output:
@@ -331,16 +357,17 @@ def projects(args):
             project = input("> ")
         session.projects.append(project)
         print("The project '{}' has been added successfully.".format(project))
-#     if args.something_else:
-#         raise NotImplementedError("This action for the subcommand "\
-#                                   "'projects' is not implemented yet.")
+    # if args.something_else:
+    #     raise NotImplementedError("This action for the subcommand "\
+    #                               "'projects' is not implemented yet.")
+    return 0
 
 
 def tasks(args):
     was_output = False  # whether there has been any output from this function
                         # so far
     if args.list:
-        frontend.list_tasks(session)
+        frontend.list_tasks(session, verbose=args.verbose)
         was_output = True
     if args.add:
         if was_output:
@@ -349,6 +376,7 @@ def tasks(args):
         task = frontend.get_task(session)
         session.tasks.append(task)
         print("The task '{}' has been added successfully.".format(task))
+    return 0
 
 
 # The main program loop.
@@ -365,7 +393,7 @@ if __name__ == "__main__":
     session.read_tasks()
     session.read_log()
 
-    import frontend.cli as frontend
+    from frontend.cli import Cli as frontend
     # Perform commands.
     # FIXME: As seen, it does not work in a loop yet.
     ret = _cl_args.func(_cl_args)

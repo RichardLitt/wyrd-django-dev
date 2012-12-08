@@ -12,6 +12,8 @@ general State and Event.
 
 """
 
+from functools import total_ordering
+
 
 class Theme():
     """
@@ -28,6 +30,7 @@ class Theme():
         raise NotImplementedError("Theme needs to be implemented yet.")
 
 
+@total_ordering
 class Goal():
     """
     Goal is a high-level concept, although less abstract than Theme. It is
@@ -43,7 +46,14 @@ class Goal():
     def __init__(self):
         raise NotImplementedError("Goal needs to be implemented yet.")
 
+    def __eq__(self, other):
+        return self.name == other.name
 
+    def __lt__(self, other):
+        return self.name < other.name
+
+
+@total_ordering
 class Plan():
     """
     Plan is a recipe how to achieve a specified target state from a specified
@@ -68,7 +78,14 @@ class Plan():
     def __init__(self):
         raise NotImplementedError("Plan needs to be implemented yet.")
 
+    def __eq__(self, other):
+        return self.name == other.name
 
+    def __lt__(self, other):
+        return self.name < other.name
+
+
+@total_ordering
 class Task():
     """
     Task is an (potentially recurrent) event with an actor, generally one that
@@ -92,6 +109,12 @@ class Task():
         # Empty-string projects are treated as no project.
         else:
             self.project = None
+
+    def __eq__(self, other):
+        return self.name == other.name and self.project == other.project
+
+    def __lt__(self, other):
+        return str(self) < str(other)
 
     def __str__(self):
         return "{name} ({proj})".format(name=self.name, proj=self.project)

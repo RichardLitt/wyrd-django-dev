@@ -11,7 +11,7 @@ This module implements classes related to time definitions.
 
 """
 import datetime
-from task import Task
+# from task import Task
 
 # TODO: Find whether (part of) this functionality is already provided by
 # Python libraries.
@@ -24,6 +24,27 @@ from task import Task
 
 # class Instant():
 #     pass
+
+
+def parse_delta(timestr):
+    """ Parses a string into a timedelta object.
+
+    Currently merely interprets the string as an integral number of minutes.
+
+    """
+    # TODO Crude NLP.
+    return datetime.timedelta(minutes=int(timestr))
+
+
+def parse_datetime(datetimestr):
+    """ Parses a string into a datetime object.
+
+    Currently merely interprets the string as an integral number of days from
+    now.
+
+    """
+    # TODO Crude NLP.
+    return datetime.datetime.now() + datetime.timedelta(days=int(datetimestr))
 
 
 class WorkSlot(object):
@@ -40,3 +61,16 @@ class WorkSlot(object):
         self.start = start
         self.end = end
         self.task = task
+
+    def __str__(self):
+        return "<WorkSlot: {task}, {start}--{end}>".format(
+            task=self.task,
+            start=self.start,
+            end=self.end)
+
+    def __repr__(self):
+        return self.__str__()
+
+    def iscurrent(self):
+        return (self.start and \
+                (not self.end or (self.end - datetime.datetime.now() > 0)))
