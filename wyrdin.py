@@ -8,8 +8,6 @@ CC-Share Alike 2012 © The Wyrd In team
 https://github.com/WyrdIn
 
 """
-# TODO removing tasks
-# TODO removing projects
 
 import argparse
 import datetime
@@ -198,6 +196,21 @@ class Session(object):
         """Returns work slots that are currently open."""
         return [slot for slot in self.wtimes if slot.end is None]
 
+    def remove_project(self, project):
+        tasks = filter(lambda task: task.project == project, self.tasks)
+        for task in tasks:
+            self.remove_task(task)
+        self.projects.remove(project)
+
+    def remove_task(self, task):
+        slots = filter(lambda slot: slot.task == task, self.wtimes)
+        for slot in slots:
+            self.remove_workslot(slot)
+        self.tasks.remove(task)
+
+    def remove_workslot(self, slot):
+        self.wtimes.remove(slot)
+
 
 def _init_argparser(arger):
     """
@@ -253,10 +266,21 @@ def _init_argparser(arger):
                                           aliases=['p', 'proj'],
                                           help="Show info about projects.")
     arger_projects.set_defaults(func=projects)
-    arger_projects.add_argument('-a', '--add', action='store_true',
+    arger_projects.add_argument('-a', '--add',
+                                dest='subcmd',
+                                action='store_const',
+                                const='add',
                                 help="Add a new project.")
-    arger_projects.add_argument('-l', '--list', action='store_true',
+    arger_projects.add_argument('-l', '--list',
+                                dest='subcmd',
+                                action='store_const',
+                                const='list',
                                 help="List defined projects.")
+    arger_projects.add_argument('-r', '--remove',
+                                dest='subcmd',
+                                action='store_const',
+                                const='remove',
+                                help="Remove an existing project.")
     arger_projects.add_argument('-v', '--verbose', action='store_true',
                                 help="Be verbose.")
 
@@ -358,14 +382,12 @@ def status(args):
 
 
 def projects(args):
-    was_output = False  # whether there has been any output from this function
-                        # so far
-    if args.list:
+
+    # Define subcommand functions.
+    def list():
         frontend.list_projects(session, args.verbose)
-        was_output = True
-    if args.add:
-        if was_output:
-            print("")
+
+    def add():
         print("Adding a project...")
         print("Specify the project name: ")
         project = input("> ")
@@ -374,9 +396,23 @@ def projects(args):
             project = input("> ")
         session.projects.append(project)
         print("The project '{}' has been added successfully.".format(project))
-    # if args.something_else:
-    #     raise NotImplementedError("This action for the subcommand "\
-    #                               "'projects' is not implemented yet.")
+
+    def remove():
+        print("Removing a project...")
+        project = frontend.get_project(session, accept_empty=False)
+        # Remove the project.
+        session.remove_project(project)
+        print(("The project '{}' and all dependent tasks have been " + \
+              "successfully removed.")\
+              .format(project))
+
+    try:
+        # Call the subcommand function.
+        locals()[args.subcmd]()
+    except KeyError:
+        raise NotImplementedError(
+            'The subcommand `{sub!s}\' is not implemented.'\
+            .format(sub=args.subcmd))
     return 0
 
 
@@ -395,7 +431,7 @@ def tasks(args):
     def remove():
         print("Removing a task...")
         task = frontend.get_task(session, session.tasks)
-        session.tasks.remove(task)
+        session.remove_task(task)
         print("The task '{}' has been removed successfully.".format(task))
 
     try:

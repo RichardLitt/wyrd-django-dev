@@ -86,7 +86,8 @@ class Cli(object):
                     task = str2task[taskname]
             if task is None:
                 # Create a new task, asking for optional details.
-                project = Cli.get_project(session)
+                project = Cli.get_project(
+                              session, msg="What project does it belong to?")
                 print("Estimated time?")
                 time = input("> ").strip()
                 print("Deadline?")
@@ -121,23 +122,37 @@ class Cli(object):
         print("")
 
     @staticmethod
-    def get_project(session):
+    def get_project(session, accept_empty=True, prompt=None):
         """Solicits a project name from the user.
 
-        An empty project is accepted too.
+        Keyword arguments:
+        session -- the user session object
+        accept_empty -- whether to accept an empty (nonexistent) project
+                        (default: True)
+        prompt -- the string to display to the user as a prompt
+                  (default: "Which project?")
 
         """
         # TODO: Here should be some form of tab-completion.
-        print("What project does it belong to?")
+        if prompt is None:
+            prompt = "Which project?"
+        print(prompt)
         project = input("> ").strip()
-        while project and project not in session.projects:
+
+        msg_choose_ex = "You can choose from the existing projects."
+        msg_choose_emp = "You can also use an empty string, meaning " + \
+                         "no project."
+        while (project or not accept_empty) \
+              and project not in session.projects:
             if project != "?":
-                print("You have not told me about this project yet.")
+                if not project and not accept_empty:
+                    print("You have to select one of the defined projects.")
+                else:
+                    print("You have not told me about this project yet.")
             Cli.choosefrom(session.projects,
-                           msg="You can choose from the existing " + \
-                               "projects.\n" + \
-                               "You can also use an empty string, meaning " + \
-                               "no project.")
+                           msg=msg_choose_ex + \
+                               (("\n" + msg_choose_emp) if accept_empty \
+                                else ""))
             # Cli.list_projects(session)
             project = input("> ").strip()
             # Try to interpret the input as a project index into the selection
