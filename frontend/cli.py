@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 #-*- coding: utf-8 -*-
-# This code is PEP8-compliant. See http://www.python.org/dev/peps/pep-0008/.
+# This code is mostly PEP8-compliant. See
+# http://www.python.org/dev/peps/pep-0008/.
 """
 
 Wyrd In: Time tracker and task manager
@@ -10,7 +11,7 @@ https://github.com/WyrdIn
 """
 from collections import Mapping
 
-from worktime import parse_delta, parse_datetime
+from worktime import parse_delta, parse_datetime, WorkSlot
 from task import Task
 
 
@@ -19,12 +20,14 @@ class Cli(object):
     """ Basic command-line user interface. """
 
     @staticmethod
-    def get_task(session, selection=None):
+    def get_task(session, selection=None, ask_details=True):
         """ Asks the user for a task from a given selection or a new one.
 
         Keyword arguments:
         session -- the user session object
         selection -- a selection of tasks to choose from (default: anything)
+        ask_details -- whether to ask the user for details, such as deadline
+                       and estimated time
 
         """
         # Check that the selection is satisfiable.
@@ -59,8 +62,8 @@ class Cli(object):
                 if selection:
                     shown_selection = True
                     Cli.choosefrom(int2task,
-                                   msg="You can choose from the " + \
-                                       "existing tasks:")
+                                   msg="You can choose from the existing "
+                                       "tasks:")
                 else:
                     print("There are currently no tasks defined.")
             taskname = input("> ")
@@ -87,16 +90,17 @@ class Cli(object):
             if task is None:
                 # Create a new task, asking for optional details.
                 project = Cli.get_project(
-                              session, msg="What project does it belong to?")
-                print("Estimated time?")
-                time = input("> ").strip()
-                print("Deadline?")
-                deadline = input("> ").strip()
+                    session, prompt="What project does it belong to?")
                 task = Task(taskname, project)
-                if time:
-                    task.time = parse_delta(time)
-                if deadline:
-                    task.deadline = parse_datetime(deadline)
+                if ask_details:
+                    print("Estimated time?")
+                    time = input("> ").strip()
+                    print("Deadline?")
+                    deadline = input("> ").strip()
+                    if time:
+                        task.time = parse_delta(time)
+                    if deadline:
+                        task.deadline = parse_datetime(deadline)
         return task
 
     @staticmethod
@@ -140,8 +144,8 @@ class Cli(object):
         project = input("> ").strip()
 
         msg_choose_ex = "You can choose from the existing projects."
-        msg_choose_emp = "You can also use an empty string, meaning " + \
-                         "no project."
+        msg_choose_emp = ("You can also use an empty string, meaning no "
+                          "project.")
         while (project or not accept_empty) \
               and project not in session.projects:
             if project != "?":
@@ -149,10 +153,15 @@ class Cli(object):
                     print("You have to select one of the defined projects.")
                 else:
                     print("You have not told me about this project yet.")
+                    wish = input("Do you wish to create it as a new project? "
+                                 "([y]/n) ").strip()
+                    if not wish.startswith('n'):
+                        session.projects.append(project)
+                        break
             Cli.choosefrom(session.projects,
-                           msg=msg_choose_ex + \
-                               (("\n" + msg_choose_emp) if accept_empty \
-                                else ""))
+                           msg=(msg_choose_ex +
+                                (("\n" + msg_choose_emp) if accept_empty
+                                 else "")))
             # Cli.list_projects(session)
             project = input("> ").strip()
             # Try to interpret the input as a project index into the selection
@@ -168,6 +177,26 @@ class Cli(object):
             # If it wasn't a project index that the user supplied, take it as
             # a string (i.e., do nothing).
         return project
+
+    @staticmethod
+    def get_workslot(session):
+        task = Cli.get_task(session, ask_details=False)
+        start = Cli.get_datetime(prompt="What was the start time?")
+        end = Cli.get_datetime(prompt="What was the end time?",
+                               validate=(lambda end: end >= start))
+        return WorkSlot(task=task, start=start, end=end)
+
+    @staticmethod
+    def get_datetime(prompt, validate=None):
+        print(prompt)
+        in_dt = None
+        while in_dt is None:
+            in_str = input("> ").strip()
+            try:
+                in_dt = parse_datetime(in_str)
+            except ValueError as error:
+                print("Error: {err!s}".format(err=error))
+        return in_dt
 
     @staticmethod
     def list_projects(session, verbose=False):
@@ -192,3 +221,4 @@ class Cli(object):
             for task in sorted(session.tasks):
                 print("    {}".format(task))
         print("")
+

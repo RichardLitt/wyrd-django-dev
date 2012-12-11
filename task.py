@@ -128,6 +128,9 @@ class Task():
     def __str__(self):
         return "{name} ({proj})".format(name=self.name, proj=self.project)
 
+    def __repr__(self):
+        return "{name} ({proj})".format(name=self.name, proj=self.project)
+
 
 class State():
     """

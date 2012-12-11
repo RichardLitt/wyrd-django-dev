@@ -29,6 +29,8 @@ FTYPE_PICKLE = 1
 
 # Variables
 session = None
+DEBUG = False
+# DEBUG = True
 
 
 class ClArgs():
@@ -95,6 +97,12 @@ class Session(object):
         sorted list of all known projects to the file.
 
         """
+        if DEBUG:
+            print("Projects:")
+            print("---------")
+            for project in self.projects:
+                pprint(project)
+            print("")
         if outfname is None:
             outfname = self.config['CFG_PROJECTS_FNAME']
         with open(outfname, 'w') as outfile:
@@ -131,7 +139,7 @@ class Session(object):
                     except EOFError:
                         break
         else:
-            raise NotImplementedError("Session.read_tasks() is not " + \
+            raise NotImplementedError("Session.read_tasks() is not "
                                       "implemented for this type of files.")
 
     def write_tasks(self, outfname=None, outftype=None):
@@ -141,6 +149,12 @@ class Session(object):
         TODO: Update docstring.
 
         """
+        if DEBUG:
+            print("Tasks:")
+            print("------")
+            for task in self.tasks:
+                pprint(task)
+            print("")
         if outfname is None:
             outfname = self.config['CFG_TASKS_FNAME']
             outftype = self.config['CFG_TASKS_FTYPE']
@@ -155,7 +169,7 @@ class Session(object):
                 for task in self.tasks:
                     pickle.dump(task, outfile)
         else:
-            raise NotImplementedError("Session.write_tasks() is not " + \
+            raise NotImplementedError("Session.write_tasks() is not "
                                       "implemented for this type of files.")
 
     def read_log(self, infname=None, inftype=None):
@@ -178,11 +192,17 @@ class Session(object):
                     except EOFError:
                         break
         else:
-            raise NotImplementedError("Session.read_log() is not " + \
+            raise NotImplementedError("Session.read_log() is not "
                                       "implemented for this type of files.")
 
     def write_log(self, outfname=None, outftype=None):
         """TODO: Update docstring."""
+        if DEBUG:
+            print("Workslots:")
+            print("---------:")
+            for wtime in self.wtimes:
+                pprint(wtime)
+            print("")
         if outfname is None:
             outfname = self.config['CFG_LOG_FNAME']
             outftype = self.config['CFG_LOG_FTYPE']
@@ -191,7 +211,7 @@ class Session(object):
                 for wtime in self.wtimes:
                     pickle.dump(wtime, outfile)
         else:
-            raise NotImplementedError("Session.write_log() is not " + \
+            raise NotImplementedError("Session.write_log() is not "
                                       "implemented for this type of files.")
 
     def find_open_slots(self):
@@ -235,8 +255,8 @@ def _init_argparser(arger):
     arger_begin.add_argument('-a', '--adjust',
                              default=0,
                              metavar='MIN',
-                             help="Adjust the beginning time by " + \
-                                  "subtracting this much.",
+                             help="Adjust the beginning time by subtracting "
+                                  "this much.",
                              type=int)
 
     # end
@@ -248,8 +268,8 @@ def _init_argparser(arger):
     arger_end.add_argument('-a', '--adjust',
                            default=0,
                            metavar='MIN',
-                           help="Adjust the end time by subtracting " + \
-                                "this much.",
+                           help="Adjust the end time by subtracting this "
+                                "much.",
                            type=int)
 
     # retro (renamed from fence)
@@ -343,7 +363,7 @@ def end(args):
     now = datetime.datetime.now() - datetime.timedelta(minutes=args.adjust)
     open_slots = session.find_open_slots()
     if not open_slots:
-        print("You have not told me you have been doing something. Use " + \
+        print("You have not told me you have been doing something. Use "
               "`begin' or `retro'.")
         return 1
     # If currently working on a single task (once at a time), assume it is that
@@ -355,14 +375,20 @@ def end(args):
     else:
         task = frontend.get_task(session,
                                  map(lambda slot: slot.task, open_slots))
-    for slot in filter(lambda slot: slot.task == task, open_slots):
+    slots_affected = filter(lambda slot: slot.task == task, open_slots)
+    for slot in slots_affected:
         slot.end = now
+    print("{num} working slot{s} {have} been closed.".format(
+        num=len(slots_affected),
+        s=("" if len(slots_affected) != 1 else "s"),
+        have=("has" if len(slots_affected) != 1 else "have")))
     return 0
 
 
 def retro(args):
-    raise NotImplementedError("The subcommand 'retro' is not implemented yet.")
-    pass
+    print("Recording a worktime in retrospect...")
+    slot = frontend.get_workslot(session)
+    session.wtimes.append(slot)
 
 
 def status(args):
@@ -371,11 +397,11 @@ def status(args):
         filter_time = lambda slot: \
             all(filter(lambda invl: slot.intersects(invl), args.time))
     else:
-        filter_time = True
+        filter_time = lambda _: True
     if not args.all:
         filter_open = lambda slot: slot.iscurrent()
     else:
-        filter_open = True
+        filter_open = lambda _: True
     # Select work slots matching the selection criteria..
     slots = [slot for slot in session.wtimes \
              if filter_time(slot) and filter_open(slot)]
@@ -394,8 +420,11 @@ def status(args):
             if len(task_slots) == 1:
                 end = task_slots[0].end or now
                 time_spent = format_timedelta(end - task_slots[0].start)
-                print("\t{time: >18}: {task}".format(task=task.name,
-                                                     time=time_spent))
+                try:
+                    print("\t{time: >18}: {task}".format(task=task.name,
+                                                         time=time_spent))
+                except:
+                    continue
             else:
                 for slot in task_slots:
                     end = slot.end or now
@@ -426,7 +455,7 @@ def projects(args):
         project = frontend.get_project(session, accept_empty=False)
         # Remove the project.
         session.remove_project(project)
-        print(("The project '{}' and all dependent tasks have been " + \
+        print(("The project '{}' and all dependent tasks have been "
               "successfully removed.")\
               .format(project))
 
@@ -470,6 +499,9 @@ def tasks(args):
 
 # The main program loop.
 if __name__ == "__main__":
+    if DEBUG:
+        from pprint import pprint
+
     # Read arguments and configuration.
     arger = argparse.ArgumentParser()
     _init_argparser(arger)

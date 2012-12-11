@@ -27,7 +27,11 @@ def parse_delta(timestr):
 
     """
     # TODO Crude NLP.
-    return timedelta(minutes=float(timestr))
+    try:
+        return timedelta(minutes=float(timestr))
+    except ValueError:
+        raise ValueError('Could not parse duration from "{arg}".'\
+                         .format(arg=timestr))
 
 
 def parse_datetime(dtstr):
@@ -38,7 +42,11 @@ def parse_datetime(dtstr):
 
     """
     # TODO Crude NLP.
-    return datetime.now() + timedelta(days=float(dtstr))
+    try:
+        return datetime.now() + timedelta(days=float(dtstr))
+    except ValueError:
+        raise ValueError('Could not parse datetime from "{arg}".'\
+                         .format(arg=dtstr))
 
 
 def daystart(dt=lambda: datetime.now()):
@@ -98,7 +106,7 @@ class Interval(object):
         if self.start is None and self.end is None:
             raise ValueError('Cannot set the length for an unbound interval.')
         if self.start is None:
-            self.start = self.end - newlegth
+            self.start = self.end - newlength
         else:
             self.end = self.start + newlength
 
@@ -140,3 +148,4 @@ class WorkSlot(Interval):
 
     def __repr__(self):
         return self.__str__()
+
