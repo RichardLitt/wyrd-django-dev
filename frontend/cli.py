@@ -199,6 +199,37 @@ class Cli(object):
         return in_dt
 
     @staticmethod
+    def modify_task(task):
+        print("What do you want to change?")
+        attr = None
+        while attr is None:
+            for attr in Task.slots:
+                try:
+                    val = task.__getattribute__(attr)
+                except AttributeError:
+                    val = None
+                print ("    {attr: >10}".format(attr=attr) +
+                    ('  (current value: "{val!s}")'.format(val=val)
+                        if val is not None else ''))
+            instr = input("> ").strip()
+            if instr in Task.slots:
+                break
+            else:
+                matching = filter(lambda slot: slot.startswith(instr),
+                                  Task.slots)
+                if len(matching) == 1:
+                    attr = matching[0]
+                else:
+                    attr = None
+                    print("Sorry, try again.")
+        print("Enter the new value.")
+        value = None
+        while value is None:
+            value = input("> ")
+            # TODO Validity of this value should be checked.
+        return attr, value
+
+    @staticmethod
     def list_projects(session, verbose=False):
         # TODO Implement verbosity.
         print("List of current projects:")
@@ -214,8 +245,8 @@ class Cli(object):
             for task in sorted(session.tasks):
                 print("    {}".format(task.name))
                 for attr in task.__dict__:
-                    print("      {attr: >10}: {val!s}".format(
-                        attr=attr, val=task.__dict__[attr]))
+                    print("      {attr: >10}: {val!s}".format(attr=attr,
+                                                              val=val))
                 print("")
         else:
             for task in sorted(session.tasks):

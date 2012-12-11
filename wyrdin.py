@@ -16,6 +16,7 @@ import datetime
 import os.path
 import pickle
 
+from task import Task
 from util import format_timedelta, group_by
 from worktime import WorkSlot, parse_interval
 
@@ -323,6 +324,11 @@ def _init_argparser(arger):
                              action='store_const',
                              const='add',
                              help="Add a new task.")
+    arger_tasks.add_argument('-m', '--modify',
+                             dest='subcmd',
+                             action='store_const',
+                             const='modify',
+                             help="Modify an existing task.")
     arger_tasks.add_argument('-r', '--remove',
                              dest='subcmd',
                              action='store_const',
@@ -355,7 +361,15 @@ def print_help(args):
 def begin(args):
     task = frontend.get_task(session)
     start = datetime.datetime.now() - datetime.timedelta(minutes=args.adjust)
+    # TODO Make the Session object take care for accounting related to adding
+    # work slots, tasks etc.
     session.wtimes.append(WorkSlot(task=task, start=start))
+    if task not in session.tasks:
+        session.tasks.append(task)
+        if ('project' in task.__dict__
+                and task.project
+                and task.project not in session.projects):
+            session.projects.append(task.project)
     return 0
 
 
@@ -479,7 +493,17 @@ def tasks(args):
         print("Adding a task...")
         task = frontend.get_task(session)
         session.tasks.append(task)
-        print("The task '{}' has been added successfully.".format(task))
+        print("The task '{}' has been added successfully."\
+              .format(task.lstrip()))
+
+    def modify():
+        print("Modifying a task...")
+        task = frontend.get_task(session, session.tasks)
+        attr, val = frontend.modify_task(task)
+        if attr in Task.slots:
+            task.__setattr__(attr, val)
+            print("The task has been succesfully updated:\n  {task!s}"\
+                  .format(task=task))
 
     def remove():
         print("Removing a task...")

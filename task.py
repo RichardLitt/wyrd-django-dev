@@ -107,6 +107,7 @@ class Task():
     leap years.''
 
     """
+    slots = ('name', 'project', 'done', 'time', 'deadline')
 
     def __init__(self, name, project):
         self.name = name
@@ -115,6 +116,7 @@ class Task():
         # Empty-string projects are treated as no project.
         else:
             self.project = None
+        self.done = False
 
     def __eq__(self, other):
         return self.name == other.name and self.project == other.project
@@ -126,10 +128,16 @@ class Task():
         return id(self)
 
     def __str__(self):
-        return "{name} ({proj})".format(name=self.name, proj=self.project)
+        return "{done} {name} ({proj})".format(
+            name=self.name, proj=self.project,
+            done=("DONE" if
+                  ('done' in self.__dict__ and self.done)
+                  else "    "))
 
     def __repr__(self):
-        return "{name} ({proj})".format(name=self.name, proj=self.project)
+        return "{done} {name} ({proj})".format(
+            name=self.name, proj=self.project,
+            done=("DONE" if self.done else "    "))
 
 
 class State():
