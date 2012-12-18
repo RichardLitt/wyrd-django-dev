@@ -15,7 +15,7 @@ general State and Event.
 from functools import total_ordering
 
 
-class Theme():
+class Theme(object):
     """
     Theme is a very high-level concept, such as `fun', `career', or `family'.
     It has the capability to generate new goals. We might not want to use it in
@@ -31,7 +31,7 @@ class Theme():
 
 
 @total_ordering
-class Goal():
+class Goal(object):
     """
     Goal is a high-level concept, although less abstract than Theme. It is
     either a State, or an Event. Goals can be positive (desired) or negative
@@ -57,7 +57,7 @@ class Goal():
 
 
 @total_ordering
-class Plan():
+class Plan(object):
     """
     Plan is a recipe how to achieve a specified target state from a specified
     initial state. Plans are parameterised by various circumstances,
@@ -92,7 +92,7 @@ class Plan():
 
 
 @total_ordering
-class Task():
+class Task(object):
     """
     Task is an (potentially recurrent) event with an actor, generally one that
     is desired by the user. Every task has the actor specified, be it the local
@@ -140,7 +140,7 @@ class Task():
             done=("DONE" if self.done else "    "))
 
 
-class State():
+class State(object):
     """
     This class represents a state of the world in the broadest sense.
     """
@@ -149,7 +149,7 @@ class State():
         raise NotImplementedError("State needs to be implemented yet.")
 
 
-class Event():
+class Event(object):
     """
     This class represents a one-time event in the real world in the broadest
     sense.
