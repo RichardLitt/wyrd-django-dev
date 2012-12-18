@@ -250,7 +250,7 @@ def _init_argparser(arger):
 
     # begin
     arger_begin = subargers.add_parser('begin',
-                                       # aliases=['b'],
+                                       aliases=['b'],
                                        help="To start working on a task.")
     arger_begin.set_defaults(func=begin)
     arger_begin.add_argument('-a', '--adjust',
@@ -263,7 +263,7 @@ def _init_argparser(arger):
     # end
     arger_end = subargers.add_parser(
         'end',
-        # aliases=['e'],
+        aliases=['e'],
         help="When you have finished/interrupted work on a task.")
     arger_end.set_defaults(func=end)
     arger_end.add_argument('-a', '--adjust',
@@ -293,7 +293,7 @@ def _init_argparser(arger):
 
     # projects (renamed from topics)
     arger_projects = subargers.add_parser('projects',
-                                          # aliases=['p', 'proj'],
+                                          aliases=['p', 'proj'],
                                           help="Show info about projects.")
     arger_projects.set_defaults(func=projects)
     arger_projects.add_argument('-a', '--add',
@@ -316,7 +316,7 @@ def _init_argparser(arger):
 
     # tasks (instead of editing the tasks store directly)
     arger_tasks = subargers.add_parser('tasks',
-                                       # aliases=['t', 'tasks'],
+                                       aliases=['t', 'tasks'],
                                        help="Show info about tasks.")
     arger_tasks.set_defaults(func=tasks)
     arger_tasks.add_argument('-a', '--add',
