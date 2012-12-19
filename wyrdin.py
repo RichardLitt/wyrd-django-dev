@@ -494,7 +494,7 @@ def tasks(args):
         task = frontend.get_task(session)
         session.tasks.append(task)
         print("The task '{}' has been added successfully."\
-              .format(task.lstrip()))
+              .format(str(task).lstrip()))
 
     def modify():
         print("Modifying a task...")

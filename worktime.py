@@ -12,7 +12,7 @@ This module implements classes related to time definitions.
 
 """
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Constants.
 zero_delta = timedelta()
@@ -42,6 +42,15 @@ def parse_datetime(dtstr):
 
     """
     # TODO Crude NLP.
+    # Try to use some keywords.
+    keywords = [(re.compile(r"^end\s+of\s+(the\s+)?world(\s+(20|')12)?$"),
+                    datetime(year=2012, month=12, day=21,
+                             hour=11, minute=11, tzinfo=timezone.utc))]
+    lower = dtstr.lower().strip()
+    for keyword, dt in keywords:
+        if keyword.match(lower):
+            return dt
+
     try:
         return datetime.now() + timedelta(days=float(dtstr))
     except ValueError:
@@ -148,4 +157,5 @@ class WorkSlot(Interval):
 
     def __repr__(self):
         return self.__str__()
+
 
