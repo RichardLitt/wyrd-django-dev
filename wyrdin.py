@@ -27,6 +27,7 @@ __all__ = []
 # Constants
 FTYPE_CSV = 0
 FTYPE_PICKLE = 1
+FTYPE_XML = 2
 
 # Variables
 session = None
@@ -51,11 +52,12 @@ class Session(object):
         # Set the default configuration.
         self.config = dict()
         self.config['CFG_PROJECTS_FNAME'] = 'projects.lst'
-        self.config['CFG_TASKS_FNAME'] = 'tasks.pkl'
-        self.config['CFG_TASKS_FTYPE'] = FTYPE_PICKLE
+        self.config['CFG_TASKS_FNAME'] = 'tasks.xml'
+        self.config['CFG_TASKS_FTYPE'] = FTYPE_XML
         self.config['CFG_LOG_FNAME'] = 'timelog.pkl'
         self.config['CFG_LOG_FTYPE'] = FTYPE_PICKLE
-        self.config['CFG_TIME_FORMAT'] = '%d %b %Y %H:%M:%S'
+        self.config['CFG_TIME_FORMAT_USER'] = '%d %b %Y %H:%M:%S %Z'
+        self.config['CFG_TIME_FORMAT_REPR'] = '%Y-%m-%d %H:%M:%S'
         # Initialise fields.
         self.projects = []
         # TODO Devise a more suitable data structure to keep tasks in
@@ -128,6 +130,10 @@ class Session(object):
             with open(infname, newline='') as infile:
                 taskreader = csv.reader(infile)
                 self.tasks = [task for task in taskreader]
+        elif inftype == FTYPE_XML:
+            from backend.xml import XmlBackend
+            with open(infname, 'rb') as infile:
+                self.tasks = XmlBackend.read_tasks(self, infile)
         elif inftype == FTYPE_PICKLE:
             if not os.path.exists(infname):
                 open(infname, 'wb').close()
@@ -165,6 +171,10 @@ class Session(object):
                 taskwriter = csv.writer(outfile)
                 for task in self.tasks:
                     taskwriter.writerow(task)
+        elif outftype == FTYPE_XML:
+            from backend.xml import XmlBackend
+            with open(outfname, 'wb') as outfile:
+                XmlBackend.write_tasks(self, self.tasks, outfile)
         elif outftype == FTYPE_PICKLE:
             with open(outfname, 'wb') as outfile:
                 for task in self.tasks:

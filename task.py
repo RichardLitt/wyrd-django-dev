@@ -108,6 +108,15 @@ class Task(object):
 
     """
     slots = ('name', 'project', 'done', 'time', 'deadline')
+    """
+    - name: name of the task
+    - project: name of the project (to be changed to a reference to the related
+               project object in future)
+    - done: has the task been done yet?
+    - time: estimated time
+    - deadline: date of the deadline (to be changed to a reference to the
+                related Deadline object in future)
+    """
 
     def __init__(self, name, project):
         self.name = name
@@ -116,7 +125,7 @@ class Task(object):
         # Empty-string projects are treated as no project.
         else:
             self.project = None
-        self.done = False
+        self._done = False
 
     def __eq__(self, other):
         return self.name == other.name and self.project == other.project
@@ -130,14 +139,20 @@ class Task(object):
     def __str__(self):
         return "{done} {name} ({proj})".format(
             name=self.name, proj=self.project,
-            done=("DONE" if
-                  ('done' in self.__dict__ and self.done)
-                  else "    "))
+            done=("DONE" if self.done else "    "))
 
     def __repr__(self):
         return "{done} {name} ({proj})".format(
             name=self.name, proj=self.project,
             done=("DONE" if self.done else "    "))
+
+    @property
+    def done(self):
+        return ('_done' in self.__dict__ and self._done)
+
+    @done.setter
+    def done(self, newval):
+        self._done = newval
 
 
 class State(object):
