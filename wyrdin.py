@@ -52,10 +52,14 @@ class Session(object):
         # Set the default configuration.
         self.config = dict()
         self.config['CFG_PROJECTS_FNAME'] = 'projects.lst'
-        self.config['CFG_TASKS_FNAME'] = 'tasks.xml'
-        self.config['CFG_TASKS_FTYPE'] = FTYPE_XML
-        self.config['CFG_LOG_FNAME'] = 'timelog.pkl'
-        self.config['CFG_LOG_FTYPE'] = FTYPE_PICKLE
+        self.config['CFG_TASKS_FNAME_IN'] = 'tasks.xml'
+        self.config['CFG_TASKS_FTYPE_IN'] = FTYPE_XML
+        self.config['CFG_TASKS_FNAME_OUT'] = 'tasks.xml'
+        self.config['CFG_TASKS_FTYPE_OUT'] = FTYPE_XML
+        self.config['CFG_LOG_FNAME_IN'] = 'timelog.pkl'
+        self.config['CFG_LOG_FTYPE_IN'] = FTYPE_PICKLE
+        self.config['CFG_LOG_FNAME_OUT'] = 'tasks.xml'
+        self.config['CFG_LOG_FTYPE_OUT'] = FTYPE_XML
         self.config['CFG_TIME_FORMAT_USER'] = '%d %b %Y %H:%M:%S %Z'
         self.config['CFG_TIME_FORMAT_REPR'] = '%Y-%m-%d %H:%M:%S'
         # Initialise fields.
@@ -64,6 +68,8 @@ class Session(object):
         # memory.
         self.tasks = []
         self.wtimes = []
+        # Auxiliary variables.
+        self._xml_header_written = False
 
     def read_config(self, cl_args):
         """ Finds all relevant configuration files, reads them and acts
@@ -121,8 +127,8 @@ class Session(object):
 
         """
         if infname is None:
-            infname = self.config['CFG_TASKS_FNAME']
-            inftype = self.config['CFG_TASKS_FTYPE']
+            infname = self.config['CFG_TASKS_FNAME_IN']
+            inftype = self.config['CFG_TASKS_FTYPE_IN']
         # This is a primitive implementation for the backend as a CSV.
         if inftype == FTYPE_CSV:
             import csv
@@ -163,8 +169,8 @@ class Session(object):
                 pprint(task)
             print("")
         if outfname is None:
-            outfname = self.config['CFG_TASKS_FNAME']
-            outftype = self.config['CFG_TASKS_FTYPE']
+            outfname = self.config['CFG_TASKS_FNAME_OUT']
+            outftype = self.config['CFG_TASKS_FTYPE_OUT']
         if outftype == FTYPE_CSV:
             import csv
             with open(outfname, newline='') as outfile:
@@ -173,8 +179,19 @@ class Session(object):
                     taskwriter.writerow(task)
         elif outftype == FTYPE_XML:
             from backend.xml import XmlBackend
-            with open(outfname, 'wb') as outfile:
-                XmlBackend.write_tasks(self, self.tasks, outfile)
+            mode = 'r+b' if self._xml_header_written else 'wb'
+            with open(outfname, mode) as outfile:
+                if self._xml_header_written:
+                    # Skip before the last line (assumed to read
+                    # "</wyrdinData>").
+                    outfile.seek(-len(b'</wyrdinData>\n'), 2)
+                else:
+                    outfile.seek(0, 2)
+                XmlBackend.write_tasks(self, self.tasks, outfile,
+                                       standalone=not self._xml_header_written)
+                if self._xml_header_written:
+                    outfile.write(b'</wyrdinData>\n')
+                self._xml_header_written = True
         elif outftype == FTYPE_PICKLE:
             with open(outfname, 'wb') as outfile:
                 for task in self.tasks:
@@ -189,8 +206,8 @@ class Session(object):
         # a subset of the log needs to be read. In the latter case, allow for
         # doing so.
         if infname is None:
-            infname = self.config['CFG_LOG_FNAME']
-            inftype = self.config['CFG_LOG_FTYPE']
+            infname = self.config['CFG_LOG_FNAME_IN']
+            inftype = self.config['CFG_LOG_FTYPE_IN']
         if inftype == FTYPE_PICKLE:
             if not os.path.exists(infname):
                 open(infname, 'wb').close()
@@ -208,19 +225,28 @@ class Session(object):
 
     def write_log(self, outfname=None, outftype=None):
         """TODO: Update docstring."""
-        if DEBUG:
-            print("Workslots:")
-            print("---------:")
-            for wtime in self.wtimes:
-                pprint(wtime)
-            print("")
         if outfname is None:
-            outfname = self.config['CFG_LOG_FNAME']
-            outftype = self.config['CFG_LOG_FTYPE']
+            outfname = self.config['CFG_LOG_FNAME_OUT']
+            outftype = self.config['CFG_LOG_FTYPE_OUT']
         if outftype == FTYPE_PICKLE:
             with open(outfname, 'wb') as outfile:
                 for wtime in self.wtimes:
                     pickle.dump(wtime, outfile)
+        elif outftype == FTYPE_XML:
+            from backend.xml import XmlBackend
+            # XXX This assumes that `write_log' was called soon after
+            # `write_tasks'.
+            mode = 'r+b' if self._xml_header_written else 'wb'
+            with open(outfname, mode) as outfile:
+                if self._xml_header_written:
+                    # Skip before the last line (assumed to read
+                    # "</wyrdinData>").
+                    outfile.seek(-len(b'</wyrdinData>\n'), 2)
+                XmlBackend.write_workslots(self, self.wtimes, outfile,
+                                           standalone=not self._xml_header_written)
+                if self._xml_header_written:
+                    outfile.write(b'</wyrdinData>\n')
+                self._xml_header_written = True
         else:
             raise NotImplementedError("Session.write_log() is not "
                                       "implemented for this type of files.")

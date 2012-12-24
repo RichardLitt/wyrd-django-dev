@@ -32,8 +32,11 @@ class XmlBackend(object):
     def _create_task_e(cls, session, task):
         """Creates an XML element for an object of the type Task."""
         task_e = etree.Element("task",
+                               id=str(task.id),
                                project=task.project,
                                done=str(int(task.done)))
+        if 'project' in task.__dict__:
+            task_e.set('project', task.project)
         if 'time' in task.__dict__:
             task_e.set('time', cls._timedelta_repr(task.time))
         if 'deadline' in task.__dict__:
@@ -58,10 +61,14 @@ class XmlBackend(object):
                           the file, including the XML header
 
         """
-        tasks_e = etree.Element('tasks')
+        if standalone:
+            top_e = wyrdin_e = etree.Element('wyrdinData')
+            tasks_e = etree.SubElement(wyrdin_e, 'tasks')
+        else:
+            top_e = tasks_e = etree.Element('tasks')
         for task in tasks:
             tasks_e.append(cls._create_task_e(session, task))
-        outfile.write(etree.tostring(tasks_e,
+        outfile.write(etree.tostring(top_e,
                                      encoding='UTF-8',
                                      pretty_print=True,
                                      xml_declaration=standalone))
@@ -76,20 +83,54 @@ class XmlBackend(object):
                 break
             # Otherwise, parse each <task> element in accordance to the way it
             # was output.
-            attrs = elem.attrib
-            # XXX When project of a task becomes something more than just
-            # a string, the code will probably break on the following line.
-            task = Task(name=elem.text, project=attrs['project'])
-            if 'done' in attrs:
-                task.done = bool(int(attrs['done']))
-            if 'time' in attrs:
-                task.time = cls._timedelta_fromrepr(attrs['time'])
-            if 'deadline' in attrs:
-                task.deadline = datetime.strptime(
-                    attrs['deadline'],
-                    session.config['CFG_TIME_FORMAT_REPR'])
-                if 'deadline_tz' in attrs:
-                    task.deadline = task.deadline.replace(
-                        tzinfo=pytz.timezone(attrs['deadline_tz']))
-            tasks.append(task)
+            elif elem.tag == "task":
+                attrs = elem.attrib
+                # XXX When project of a task becomes something more than just
+                # a string, the code will probably break on the following line.
+                if 'project' in attrs:
+                    project = attrs['project']
+                else:
+                    project = ''
+                task = Task(name=elem.text,
+                            project=project,
+                            id=int(attrs['id']))
+                if 'done' in attrs:
+                    task.done = bool(int(attrs['done']))
+                if 'time' in attrs:
+                    task.time = cls._timedelta_fromrepr(attrs['time'])
+                if 'deadline' in attrs:
+                    task.deadline = datetime.strptime(
+                        attrs['deadline'],
+                        session.config['CFG_TIME_FORMAT_REPR'])
+                    if 'deadline_tz' in attrs:
+                        task.deadline = task.deadline.replace(
+                            tzinfo=pytz.timezone(attrs['deadline_tz']))
+                tasks.append(task)
         return tasks
+
+    @classmethod
+    def _create_slot_e(cls, session, slot):
+        """Creates an XML element for an object of the type WorkSlot."""
+        # slot_e = etree.Element('workslot', task=str(slot.task.id))
+        slot_e = etree.Element('workslot', task=str(slot.task.name))
+        if slot.start is not None:
+            slot_e.set('start', datetime.strftime(
+                slot.start, session.config['CFG_TIME_FORMAT_REPR']))
+        if slot.end is not None:
+            slot_e.set('end', datetime.strftime(
+                slot.end, session.config['CFG_TIME_FORMAT_REPR']))
+        return slot_e
+
+    @classmethod
+    def write_workslots(cls, session, slots, outfile, standalone=True):
+        if standalone:
+            top_e = wyrdin_e = etree.Element('wyrdinData')
+            slots_e = etree.SubElement(wyrdin_e, 'workslots')
+        else:
+            top_e = slots_e = etree.Element('workslots')
+        for slot in slots:
+            slots_e.append(cls._create_slot_e(session, slot))
+        outfile.write(etree.tostring(top_e,
+                                     encoding='UTF-8',
+                                     pretty_print=True,
+                                     xml_declaration=standalone))

@@ -107,7 +107,7 @@ class Task(object):
     leap years.''
 
     """
-    slots = ('name', 'project', 'done', 'time', 'deadline')
+    slots = ('id', 'name', 'project', 'done', 'time', 'deadline')
     """
     - name: name of the task
     - project: name of the project (to be changed to a reference to the related
@@ -117,14 +117,20 @@ class Task(object):
     - deadline: date of the deadline (to be changed to a reference to the
                 related Deadline object in future)
     """
+    _next_id = 0
 
-    def __init__(self, name, project):
+    def __init__(self, name, project, id=None):
         self.name = name
         if project:
             self.project = project
         # Empty-string projects are treated as no project.
         else:
             self.project = None
+        if id is not None and id >= Task._next_id:
+            self._id = id
+        else:
+            self._id = Task._next_id
+        Task._next_id = self._id + 1
         self._done = False
 
     def __eq__(self, other):
@@ -153,6 +159,10 @@ class Task(object):
     @done.setter
     def done(self, newval):
         self._done = newval
+
+    @property
+    def id(self):
+        return self._id
 
 
 class State(object):
