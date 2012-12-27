@@ -203,7 +203,8 @@ class Cli(object):
         print("What do you want to change?")
         attr = None
         while attr is None:
-            for attr in Task.slots:
+            for attr in filter(lambda slot: Task.slots[slot]['editable'],
+                               Task.slots):
                 try:
                     val = task.__getattribute__(attr)
                 except AttributeError:
@@ -213,20 +214,28 @@ class Cli(object):
                         if val is not None else ''))
             instr = input("> ").strip()
             if instr in Task.slots:
+                attr = instr
                 break
             else:
-                matching = filter(lambda slot: slot.startswith(instr),
-                                  Task.slots)
+                matching = [slot for slot in Task.slots
+                            if (slot.startswith(instr)
+                                and Task.slots[slot]['editable'])]
                 if len(matching) == 1:
                     attr = matching[0]
                 else:
                     attr = None
-                    print("Sorry, try again.")
+                    print("Sorry, could not unambiguously set the attribute "
+                          "to the value specified. Please, try again.")
         print("Enter the new value.")
         value = None
+        attr_type = Task.slots[attr]['type']
         while value is None:
             value = input("> ")
-            # TODO Validity of this value should be checked.
+            # Check the type of the value.
+            try:
+                value = attr_type(value)
+            except:
+                value = None
         return attr, value
 
     @staticmethod

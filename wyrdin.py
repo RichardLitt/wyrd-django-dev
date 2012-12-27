@@ -56,8 +56,8 @@ class Session(object):
         self.config['CFG_TASKS_FTYPE_IN'] = FTYPE_XML
         self.config['CFG_TASKS_FNAME_OUT'] = 'tasks.xml'
         self.config['CFG_TASKS_FTYPE_OUT'] = FTYPE_XML
-        self.config['CFG_LOG_FNAME_IN'] = 'timelog.pkl'
-        self.config['CFG_LOG_FTYPE_IN'] = FTYPE_PICKLE
+        self.config['CFG_LOG_FNAME_IN'] = 'tasks.xml'
+        self.config['CFG_LOG_FTYPE_IN'] = FTYPE_XML
         self.config['CFG_LOG_FNAME_OUT'] = 'tasks.xml'
         self.config['CFG_LOG_FTYPE_OUT'] = FTYPE_XML
         self.config['CFG_TIME_FORMAT_USER'] = '%d %b %Y %H:%M:%S %Z'
@@ -219,6 +219,10 @@ class Session(object):
                         self.wtimes.append(worktime)
                     except EOFError:
                         break
+        elif inftype == FTYPE_XML:
+            from backend.xml import XmlBackend
+            with open(infname, 'rb') as infile:
+                self.wtimes = XmlBackend.read_workslots(self, infile)
         else:
             raise NotImplementedError("Session.read_log() is not "
                                       "implemented for this type of files.")
@@ -242,14 +246,43 @@ class Session(object):
                     # Skip before the last line (assumed to read
                     # "</wyrdinData>").
                     outfile.seek(-len(b'</wyrdinData>\n'), 2)
-                XmlBackend.write_workslots(self, self.wtimes, outfile,
-                                           standalone=not self._xml_header_written)
+                XmlBackend.write_workslots(
+                    self, self.wtimes, outfile, standalone=not
+                    self._xml_header_written)
                 if self._xml_header_written:
                     outfile.write(b'</wyrdinData>\n')
                 self._xml_header_written = True
         else:
             raise NotImplementedError("Session.write_log() is not "
                                       "implemented for this type of files.")
+
+    def write_all(self, tasks_ftype=None, tasks_fname=None,
+                  log_ftype=None, log_fname=None):
+        """Writes out projects, tasks, and working slots to files as dictated
+        by configuration settings.
+
+        """
+        self.write_projects()
+        if tasks_ftype is None:
+            tasks_ftype = self.config['CFG_TASKS_FTYPE_OUT']
+        if log_ftype is None:
+            log_ftype = self.config['CFG_LOG_FTYPE_OUT']
+        if tasks_fname is None:
+            tasks_fname = self.config['CFG_TASKS_FNAME_OUT']
+        if log_fname is None:
+            log_fname = self.config['CFG_LOG_FNAME_OUT']
+        # The only special case so far.
+        if (tasks_ftype == FTYPE_XML and log_ftype == FTYPE_XML
+                and tasks_fname == log_fname):
+            from backend.xml import XmlBackend
+            with open(tasks_fname, 'wb') as outfile:
+                XmlBackend.write_all(self, self.tasks, self.wtimes, outfile)
+        else:
+            # FIXME: The type of file is not looked at, unless the file name is
+            # supplied too. Provide some default filename for the supported
+            # file types.
+            self.write_log(outftype=log_ftype, outfname=log_fname)
+            self.write_tasks(outftype=tasks_ftype, outfname=tasks_fname)
 
     def find_open_slots(self):
         """Returns work slots that are currently open."""
@@ -260,6 +293,9 @@ class Session(object):
         for task in tasks:
             self.remove_task(task)
         self.projects.remove(project)
+
+    def get_task(self, task_id):
+        return filter(lambda task: task.id == task_id, self.tasks).__next__()
 
     def remove_task(self, task):
         slots = filter(lambda slot: slot.task == task, self.wtimes)
@@ -425,7 +461,7 @@ def end(args):
     else:
         task = frontend.get_task(session,
                                  map(lambda slot: slot.task, open_slots))
-    slots_affected = filter(lambda slot: slot.task == task, open_slots)
+    slots_affected = [slot for slot in open_slots if slot.task == task]
     for slot in slots_affected:
         slot.end = now
     print("{num} working slot{s} {have} been closed.".format(
@@ -445,7 +481,7 @@ def status(args):
     # Transform selection criteria into test functions.
     if args.time:
         filter_time = lambda slot: \
-            all(filter(lambda invl: slot.intersects(invl), args.time))
+            all(map(lambda invl: slot.intersects(invl), args.time))
     else:
         filter_time = lambda _: True
     if not args.all:
@@ -460,7 +496,7 @@ def status(args):
         # FIXME Update the message.
         print("You don't seem to be working now.")
     else:
-        # FIXME Update the message.
+        # FIXME Update the message, especially in case when called with --all.
         print("You have been working on the following tasks:")
         now = datetime.datetime.now()
         task2slot = group_by(slots, "task", single_attr=True)
@@ -537,6 +573,7 @@ def tasks(args):
         task = frontend.get_task(session, session.tasks)
         attr, val = frontend.modify_task(task)
         if attr in Task.slots:
+            print("Setting {attr} to {val!s}...".format(attr=attr, val=val))
             task.__setattr__(attr, val)
             print("The task has been succesfully updated:\n  {task!s}"\
                   .format(task=task))
@@ -582,6 +619,4 @@ if __name__ == "__main__":
         print("Done.")
 
     # Write data on exit.
-    session.write_log()
-    session.write_tasks()
-    session.write_projects()
+    session.write_all()

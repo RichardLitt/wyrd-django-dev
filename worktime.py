@@ -93,8 +93,8 @@ class Interval(object):
         """Initialises the object."""
         if not (start is None or isinstance(start, datetime)) \
            or not (end is None or isinstance(end, datetime)):
-            raise TypeError('The `start\' and `end\' arguments have to be'
-                            'a `datetime\' instance or None.')
+            raise TypeError('The `start\' and `end\' arguments have to '
+                            'be a `datetime\' instance or None.')
         if start and end and start > end:
             raise ValueError('Start must be earlier than end.')
         self.start = start
@@ -157,5 +157,3 @@ class WorkSlot(Interval):
 
     def __repr__(self):
         return self.__str__()
-
-

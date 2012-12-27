@@ -33,9 +33,8 @@ class XmlBackend(object):
         """Creates an XML element for an object of the type Task."""
         task_e = etree.Element("task",
                                id=str(task.id),
-                               project=task.project,
                                done=str(int(task.done)))
-        if 'project' in task.__dict__:
+        if 'project' in task.__dict__ and task.project is not None:
             task_e.set('project', task.project)
         if 'time' in task.__dict__:
             task_e.set('time', cls._timedelta_repr(task.time))
@@ -111,8 +110,8 @@ class XmlBackend(object):
     @classmethod
     def _create_slot_e(cls, session, slot):
         """Creates an XML element for an object of the type WorkSlot."""
-        # slot_e = etree.Element('workslot', task=str(slot.task.id))
-        slot_e = etree.Element('workslot', task=str(slot.task.name))
+        slot_e = etree.Element('workslot', task=str(slot.task.id))
+        # slot_e = etree.Element('workslot', task=str(slot.task.name))
         if slot.start is not None:
             slot_e.set('start', datetime.strftime(
                 slot.start, session.config['CFG_TIME_FORMAT_REPR']))
@@ -134,3 +133,56 @@ class XmlBackend(object):
                                      encoding='UTF-8',
                                      pretty_print=True,
                                      xml_declaration=standalone))
+
+    @classmethod
+    def read_workslots(cls, session, infile):
+        from worktime import WorkSlot
+        slots = []
+        for _, elem in etree.iterparse(infile):
+            # Stop reading as soon as the </workslots> tag is encountered.
+            if elem.tag == "workslots":
+                break
+            # Otherwise, parse each <workslot> element in accordance to the way
+            # it was output.
+            elif elem.tag == "workslot":
+                attrs = elem.attrib
+                task_id = int(attrs['task'])
+                task = session.get_task(task_id)
+                start = (datetime.strptime(
+                            attrs['start'],
+                            session.config['CFG_TIME_FORMAT_REPR'])
+                         if 'start' in attrs else None)
+                end = (datetime.strptime(
+                            attrs['end'],
+                            session.config['CFG_TIME_FORMAT_REPR'])
+                       if 'end' in attrs else None)
+                slot = WorkSlot(task=task, start=start, end=end)
+                slots.append(slot)
+        return slots
+
+    # XXX This name is not the best possible. `all' still does not include
+    # projects, just tasks and work slots.
+    @classmethod
+    def write_all(cls, session, tasks, slots, outfile):
+        """Writes out a list of tasks and work slots in the XML format to the
+        open file `outfile'.
+
+        Keyword arguments:
+            - session: the global object for the user session
+            - tasks: an iterable of objects of the type Task
+            - slots: an iterable of objects of the type WorkSlot
+            - outfile: a file open for writing, to which the tasks should be
+                       written
+
+        """
+        wyrdin_e = etree.Element('wyrdinData')
+        tasks_e = etree.SubElement(wyrdin_e, 'tasks')
+        slots_e = etree.SubElement(wyrdin_e, 'workslots')
+        for task in tasks:
+            tasks_e.append(cls._create_task_e(session, task))
+        for slot in slots:
+            slots_e.append(cls._create_slot_e(session, slot))
+        outfile.write(etree.tostring(wyrdin_e,
+                                     encoding='UTF-8',
+                                     pretty_print=True,
+                                     xml_declaration=True))

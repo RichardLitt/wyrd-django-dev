@@ -13,6 +13,7 @@ general State and Event.
 """
 
 from functools import total_ordering
+from datetime import datetime, timedelta
 
 
 class Theme(object):
@@ -107,7 +108,12 @@ class Task(object):
     leap years.''
 
     """
-    slots = ('id', 'name', 'project', 'done', 'time', 'deadline')
+    slots = {'id': {'type': int, 'editable': False},
+             'name': {'type': str, 'editable': True},
+             'project': {'type': str, 'editable': True},
+             'done': {'type': bool, 'editable': True},
+             'time': {'type': timedelta, 'editable': True},
+             'deadline': {'type': datetime, 'editable': True}}
     """
     - name: name of the task
     - project: name of the project (to be changed to a reference to the related
@@ -120,6 +126,17 @@ class Task(object):
     _next_id = 0
 
     def __init__(self, name, project, id=None):
+        """Creates a new task.
+
+        Keyword arguments:
+            - name: name of the task
+            - project: name of the project (can be "" to mean the task does not
+                       belong to any defined project)
+            - id: an ID (a number) of the task, if one is needed; if ID is
+                  supplied, it has to be non-negative integer larger than any
+                  of task IDs assigned so far
+
+        """
         self.name = name
         if project:
             self.project = project
@@ -143,14 +160,17 @@ class Task(object):
         return id(self)
 
     def __str__(self):
-        return "{done} {name} ({proj})".format(
-            name=self.name, proj=self.project,
-            done=("DONE" if self.done else "    "))
+        if self.project:
+            return "{done} {name} ({proj})".format(
+                name=self.name, proj=self.project,
+                done=("DONE" if self.done else "    "))
+        else:
+            return "{done} {name}".format(
+                name=self.name,
+                done=("DONE" if self.done else "    "))
 
     def __repr__(self):
-        return "{done} {name} ({proj})".format(
-            name=self.name, proj=self.project,
-            done=("DONE" if self.done else "    "))
+        return str(self)
 
     @property
     def done(self):
