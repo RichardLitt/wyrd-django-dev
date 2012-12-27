@@ -11,7 +11,7 @@ https://github.com/WyrdIn
 """
 from collections import Mapping
 
-from worktime import parse_delta, parse_datetime, WorkSlot
+from worktime import parse_timedelta, parse_datetime, WorkSlot
 from task import Task
 
 
@@ -98,7 +98,7 @@ class Cli(object):
                     print("Deadline?")
                     deadline = input("> ").strip()
                     if time:
-                        task.time = parse_delta(time)
+                        task.time = parse_timedelta(time)
                     if deadline:
                         task.deadline = parse_datetime(deadline)
         return task

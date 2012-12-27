@@ -18,7 +18,7 @@ import pickle
 
 from task import Task
 from util import format_timedelta, group_by
-from worktime import WorkSlot, parse_interval
+from worktime import WorkSlot, parse_interval, parse_timedelta
 
 
 # Public fields and methods.
@@ -327,10 +327,10 @@ def _init_argparser(arger):
     arger_begin.set_defaults(func=begin)
     arger_begin.add_argument('-a', '--adjust',
                              default=0,
-                             metavar='MIN',
+                             metavar='TDELTA',
                              help="Adjust the beginning time by subtracting "
                                   "this much.",
-                             type=int)
+                             type=parse_timedelta)
 
     # end
     arger_end = subargers.add_parser(
@@ -343,15 +343,22 @@ def _init_argparser(arger):
                            metavar='MIN',
                            help="Adjust the end time by subtracting this "
                                 "much.",
-                           type=int)
+                           type=parse_timedelta)
+    arger_end.add_argument('-d', '--done',
+                           action='store_true')
 
     # retro (renamed from fence)
     arger_retro = subargers.add_parser('retro',
+                                       aliases=['r'],
                                        help="Retrospective recording of work.")
+    arger_retro.add_argument('-d', '--done',
+                             action='store_true')
     arger_retro.set_defaults(func=retro)
 
     # status (merged with state)
     arger_status = subargers.add_parser('status',
+                                        aliases=['s', 'st', 'stat', 'slots',
+                                                 'log'],
                                         help="Prints out the current status "\
                                              "info.")
     arger_status.set_defaults(func=status)
@@ -432,7 +439,7 @@ def print_help(args):
 
 def begin(args):
     task = frontend.get_task(session)
-    start = datetime.datetime.now() - datetime.timedelta(minutes=args.adjust)
+    start = datetime.datetime.now() + args.adjust
     # TODO Make the Session object take care for accounting related to adding
     # work slots, tasks etc.
     session.wtimes.append(WorkSlot(task=task, start=start))
@@ -446,7 +453,7 @@ def begin(args):
 
 
 def end(args):
-    now = datetime.datetime.now() - datetime.timedelta(minutes=args.adjust)
+    end = datetime.datetime.now() + args.adjust
     open_slots = session.find_open_slots()
     if not open_slots:
         print("You have not told me you have been doing something. Use "
@@ -455,25 +462,30 @@ def end(args):
     # If currently working on a single task (once at a time), assume it is that
     # one to be ended.
     if len(open_slots) == 1:
-        task = open_slots[0]
+        task = open_slots[0].task
     # If more tasks are currently open, let the user specify which one is to be
     # ended.
     else:
         task = frontend.get_task(session,
                                  map(lambda slot: slot.task, open_slots))
-    slots_affected = [slot for slot in open_slots if slot.task == task]
+    if args.done:
+        task.done = True
+    slots_affected = [slot for slot in open_slots if slot.task is task]
     for slot in slots_affected:
-        slot.end = now
-    print("{num} working slot{s} {have} been closed.".format(
+        slot.end = end
+    print("{num} working slot{s} {have} been closed: {task!s}".format(
         num=len(slots_affected),
-        s=("" if len(slots_affected) != 1 else "s"),
-        have=("has" if len(slots_affected) != 1 else "have")))
+        s=("" if len(slots_affected) == 1 else "s"),
+        have=("has" if len(slots_affected) == 1 else "have"),
+        task=task))
     return 0
 
 
 def retro(args):
     print("Recording a worktime in retrospect...")
     slot = frontend.get_workslot(session)
+    if args.done:
+        slot.task.done = True
     session.wtimes.append(slot)
 
 

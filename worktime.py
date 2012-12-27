@@ -14,24 +14,58 @@ This module implements classes related to time definitions.
 import re
 from datetime import datetime, timedelta, timezone
 
+from backend.generic import DBObject
+
+
 # Constants.
 zero_delta = timedelta()
-_dashes = re.compile('-+')
+_dashes_rx = re.compile('-+')
+_float_subrx = r'(?:-\s*)?(?:\d+(?:\.\d+)?|\.\d+)'
+_timedelta_rx = re.compile((r'\W*?(?:({flt})\s*d(?:ays?\W+)?\W*?)?'
+                        r'(?:({flt})\s*h(?:(?:ou)?rs?\W+)?\W*?)?'
+                        r'(?:({flt})\s*m(?:in(?:ute)?s?\W+)?\W*?)?'
+                        r'(?:({flt})\s*s(?:ec(?:ond)?s?)?\W*?)?$')\
+                            .format(flt=_float_subrx),
+                        re.IGNORECASE)
 
 
-def parse_delta(timestr):
+def parse_timedelta(timestr):
     """ Parses a string into a timedelta object.
 
-    Currently merely interprets the string as a floating point number of
-    minutes.
-
     """
-    # TODO Crude NLP.
-    try:
-        return timedelta(minutes=float(timestr))
-    except ValueError:
-        raise ValueError('Could not parse duration from "{arg}".'\
-                         .format(arg=timestr))
+    rx_match = _timedelta_rx.match(timestr)
+    # If the string seems to comply to the format assumed by the regex,
+    if rx_match is not None:
+        vals = []
+        any_matched = False
+        # Convert matched groups for numbers into floats one by one.
+        for grp_str in rx_match.groups():
+            if grp_str:
+                any_matched = True
+                try:
+                    val = float(grp_str)
+                except ValueError:
+                    raise ValueError('Could not parse float from {grp}.'\
+                        .format(grp=grp_str))
+            else:
+                val = 0
+            vals.append(val)
+        # If at least one of the groups was present,
+        # (In the regex, all time specifications (days, hours etc.) are
+        # optional. We have to check here that at least one was supplied.)
+        if any_matched:
+            return timedelta(days=vals[0], hours=vals[1],
+                             minutes=vals[2], seconds=vals[3])
+        else:
+            rx_match = None
+    # If regex did not solve the problem,
+    if rx_match is None:
+        # Try to interpret the input as a float amount of minutes.
+        try:
+            return timedelta(minutes=float(timestr))
+        except ValueError:
+            raise ValueError('Could not parse duration from "{arg}".'\
+                            .format(arg=timestr))
 
 
 def parse_datetime(dtstr):
@@ -43,7 +77,8 @@ def parse_datetime(dtstr):
     """
     # TODO Crude NLP.
     # Try to use some keywords.
-    keywords = [(re.compile(r"^end\s+of\s+(the\s+)?world(\s+(20|')12)?$"),
+    keywords = [(re.compile(r"^\s*(?:the\s+)?end\s+of\s+(?:the\s+)?"
+                            r"world(?:\s+(?:20|')12)?$"),
                     datetime(year=2012, month=12, day=21,
                              hour=11, minute=11, tzinfo=timezone.utc))]
     lower = dtstr.lower().strip()
@@ -77,7 +112,7 @@ def parse_interval(ivalstr):
         return Interval(start, end)
 
     # Parse the interval in the form A--B.
-    start, end = _dashes.split(ivalstr.strip(), 2)
+    start, end = _dashes_rx.split(ivalstr.strip(), 2)
     start = parse_datetime(start) if start else None
     end = parse_datetime(end) if end else None
     return Interval(start, end)
@@ -136,7 +171,7 @@ class Interval(object):
         return self.includes(datetime.now())
 
 
-class WorkSlot(Interval):
+class WorkSlot(Interval, DBObject):
     """ This shall be a time span (or `timedelta' in Python terminology) with
     the annotation saying how it was spent. It shall link to the relevant task
     (or, perhaps, a list of concurrently performed tasks). The annotations
@@ -146,8 +181,21 @@ class WorkSlot(Interval):
 
     """
 
-    def __init__(self, task, start=None, end=None):
+    def __init__(self, task, start, end=None, id=None):
+        """Creates a new work slot.
+
+        Keyword arguments:
+            - task: an instance of task this work slot refers to
+            - start: a datetime instance representing the start of this work
+                     slot
+            - end: a datetime instance representing the end of this work
+                   slot (or None, meaning it has not ended yet)
+            - id: the ID (a number) of this work slot as a database object, if
+                  a specific one is required
+
+        """
         super().__init__(start, end)
+        DBObject.__init__(self, id)
         self.task = task
 
     def __str__(self):

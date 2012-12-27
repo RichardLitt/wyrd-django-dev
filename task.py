@@ -15,6 +15,8 @@ general State and Event.
 from functools import total_ordering
 from datetime import datetime, timedelta
 
+from backend.generic import DBObject
+
 
 class Theme(object):
     """
@@ -93,9 +95,9 @@ class Plan(object):
 
 
 @total_ordering
-class Task(object):
+class Task(DBObject):
     """
-    Task is an (potentially recurrent) event with an actor, generally one that
+    Task is a (potentially recurrent) event with an actor, generally one that
     is desired by the user. Every task has the actor specified, be it the local
     user or someone else, even a generic `someone'. Tasks generally also have
     deadlines and belong to a plan, even if the plan should consist of a single
@@ -123,8 +125,6 @@ class Task(object):
     - deadline: date of the deadline (to be changed to a reference to the
                 related Deadline object in future)
     """
-    _next_id = 0
-
     def __init__(self, name, project, id=None):
         """Creates a new task.
 
@@ -132,26 +132,23 @@ class Task(object):
             - name: name of the task
             - project: name of the project (can be "" to mean the task does not
                        belong to any defined project)
-            - id: an ID (a number) of the task, if one is needed; if ID is
-                  supplied, it has to be non-negative integer larger than any
-                  of task IDs assigned so far
+            - id: an ID (a number) of the task, if a specific one is required;
+                  if ID is supplied, it has to be non-negative integer larger
+                  than any of task IDs assigned so far
 
         """
+        super(Task, self).__init__(id)
         self.name = name
         if project:
             self.project = project
         # Empty-string projects are treated as no project.
         else:
             self.project = None
-        if id is not None and id >= Task._next_id:
-            self._id = id
-        else:
-            self._id = Task._next_id
-        Task._next_id = self._id + 1
         self._done = False
 
     def __eq__(self, other):
-        return self.name == other.name and self.project == other.project
+        return (isinstance(other, Task) and
+                self.name == other.name and self.project == other.project)
 
     def __lt__(self, other):
         return str(self) < str(other)
@@ -179,10 +176,6 @@ class Task(object):
     @done.setter
     def done(self, newval):
         self._done = newval
-
-    @property
-    def id(self):
-        return self._id
 
 
 class State(object):

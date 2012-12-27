@@ -110,8 +110,9 @@ class XmlBackend(object):
     @classmethod
     def _create_slot_e(cls, session, slot):
         """Creates an XML element for an object of the type WorkSlot."""
-        slot_e = etree.Element('workslot', task=str(slot.task.id))
-        # slot_e = etree.Element('workslot', task=str(slot.task.name))
+        slot_e = etree.Element('workslot',
+                               id=str(slot.id),
+                               task=str(slot.task.id))
         if slot.start is not None:
             slot_e.set('start', datetime.strftime(
                 slot.start, session.config['CFG_TIME_FORMAT_REPR']))
@@ -146,6 +147,7 @@ class XmlBackend(object):
             # it was output.
             elif elem.tag == "workslot":
                 attrs = elem.attrib
+                id_ = int(attrs['id'])
                 task_id = int(attrs['task'])
                 task = session.get_task(task_id)
                 start = (datetime.strptime(
@@ -156,7 +158,7 @@ class XmlBackend(object):
                             attrs['end'],
                             session.config['CFG_TIME_FORMAT_REPR'])
                        if 'end' in attrs else None)
-                slot = WorkSlot(task=task, start=start, end=end)
+                slot = WorkSlot(task=task, start=start, end=end, id=id_)
                 slots.append(slot)
         return slots
 
