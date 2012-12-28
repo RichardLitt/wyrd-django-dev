@@ -115,7 +115,10 @@ class Task(DBObject):
              'project': {'type': str, 'editable': True},
              'done': {'type': bool, 'editable': True},
              'time': {'type': timedelta, 'editable': True},
-             'deadline': {'type': datetime, 'editable': True}}
+             'deadline': {'type': datetime, 'editable': True},
+             'prerequisites': {'type': list, 'editable': True},
+             'enables': {'type': list, 'editable': True},
+             }
     """
     - name: name of the task
     - project: name of the project (to be changed to a reference to the related
@@ -169,6 +172,10 @@ class Task(DBObject):
     def __repr__(self):
         return str(self)
 
+
+    def short_repr(self):
+        return 't{id}'.format(id=self.id)
+
     @property
     def done(self):
         return ('_done' in self.__dict__ and self._done)
@@ -178,21 +185,25 @@ class Task(DBObject):
         self._done = newval
 
 
-class State(object):
+class StateOrEvent(DBObject):
+    pass
+
+
+class State(StateOrEvent):
     """
     This class represents a state of the world in the broadest sense.
     """
 
-    def __init__(self):
-        raise NotImplementedError("State needs to be implemented yet.")
+    def short_repr(self):
+        return 's{id}'.format(id=self.id)
 
 
-class Event(object):
+class Event(StateOrEvent):
     """
     This class represents a one-time event in the real world in the broadest
     sense.
 
     """
 
-    def __init__(self):
-        raise NotImplementedError("Event needs to be implemented yet.")
+    def short_repr(self):
+        return 'e{id}'.format(id=self.id)

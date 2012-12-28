@@ -19,103 +19,15 @@ from backend.generic import DBObject
 
 # Constants.
 zero_delta = timedelta()
-_dashes_rx = re.compile('-+')
-_float_subrx = r'(?:-\s*)?(?:\d+(?:\.\d+)?|\.\d+)'
-_timedelta_rx = re.compile((r'\W*?(?:({flt})\s*d(?:ays?\W+)?\W*?)?'
-                        r'(?:({flt})\s*h(?:(?:ou)?rs?\W+)?\W*?)?'
-                        r'(?:({flt})\s*m(?:in(?:ute)?s?\W+)?\W*?)?'
-                        r'(?:({flt})\s*s(?:ec(?:ond)?s?)?\W*?)?$')\
-                            .format(flt=_float_subrx),
-                        re.IGNORECASE)
 
 
-def parse_timedelta(timestr):
-    """ Parses a string into a timedelta object.
-
-    """
-    rx_match = _timedelta_rx.match(timestr)
-    # If the string seems to comply to the format assumed by the regex,
-    if rx_match is not None:
-        vals = []
-        any_matched = False
-        # Convert matched groups for numbers into floats one by one.
-        for grp_str in rx_match.groups():
-            if grp_str:
-                any_matched = True
-                try:
-                    val = float(grp_str)
-                except ValueError:
-                    raise ValueError('Could not parse float from {grp}.'\
-                        .format(grp=grp_str))
-            else:
-                val = 0
-            vals.append(val)
-        # If at least one of the groups was present,
-        # (In the regex, all time specifications (days, hours etc.) are
-        # optional. We have to check here that at least one was supplied.)
-        if any_matched:
-            return timedelta(days=vals[0], hours=vals[1],
-                             minutes=vals[2], seconds=vals[3])
-        else:
-            rx_match = None
-    # If regex did not solve the problem,
-    if rx_match is None:
-        # Try to interpret the input as a float amount of minutes.
-        try:
-            return timedelta(minutes=float(timestr))
-        except ValueError:
-            raise ValueError('Could not parse duration from "{arg}".'\
-                            .format(arg=timestr))
+def daystart(dt=lambda: datetime.now(), tz=None):
+    return dt.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=tz)
 
 
-def parse_datetime(dtstr):
-    """ Parses a string into a datetime object.
-
-    Currently merely interprets the string as a floating point number of days
-    from now.
-
-    """
-    # TODO Crude NLP.
-    # Try to use some keywords.
-    keywords = [(re.compile(r"^\s*(?:the\s+)?end\s+of\s+(?:the\s+)?"
-                            r"world(?:\s+(?:20|')12)?$"),
-                    datetime(year=2012, month=12, day=21,
-                             hour=11, minute=11, tzinfo=timezone.utc))]
-    lower = dtstr.lower().strip()
-    for keyword, dt in keywords:
-        if keyword.match(lower):
-            return dt
-
-    try:
-        return datetime.now() + timedelta(days=float(dtstr))
-    except ValueError:
-        raise ValueError('Could not parse datetime from "{arg}".'\
-                         .format(arg=dtstr))
-
-
-def daystart(dt=lambda: datetime.now()):
-    return dt.replace(hour=0, minute=0, second=0, microsecond=0)
-
-
-def dayend(dt=lambda: datetime.now()):
-    return dt.replace(hour=23, minute=59, second=59, microsecond=999999)
-
-
-def parse_interval(ivalstr):
-    """ Parses a string into an Interval object."""
-    now = datetime.now()
-    # Try to use some keywords.
-    keywords = {'today': (daystart(now), dayend(now))}
-    ivalstr = ivalstr.strip()
-    if ivalstr.lower() in keywords:
-        start, end = keywords[ivalstr.lower()]
-        return Interval(start, end)
-
-    # Parse the interval in the form A--B.
-    start, end = _dashes_rx.split(ivalstr.strip(), 2)
-    start = parse_datetime(start) if start else None
-    end = parse_datetime(end) if end else None
-    return Interval(start, end)
+def dayend(dt=lambda: datetime.now(), tz=None):
+    return dt.replace(hour=23, minute=59, second=59, microsecond=999999,
+                      tzinfo=tz)
 
 
 class Interval(object):
@@ -167,8 +79,11 @@ class Interval(object):
         return (self.start is None or self.start <= dt) and \
                (self.end is None or self.end >= dt)
 
-    def iscurrent(self):
-        return self.includes(datetime.now())
+    def iscurrent(self, tz=None):
+        if tz is None:
+            return self.includes(datetime.now())
+        else:
+            return self.includes(datetime.now(tz))
 
 
 class WorkSlot(Interval, DBObject):
@@ -205,3 +120,6 @@ class WorkSlot(Interval, DBObject):
 
     def __repr__(self):
         return self.__str__()
+
+    def short_repr(self):
+        return 'ws{id}'.format(id=self.id)

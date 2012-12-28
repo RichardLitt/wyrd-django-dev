@@ -8,17 +8,15 @@ CC-Share Alike 2012 © The Wyrd In team
 https://github.com/WyrdIn
 
 """
-
-# TODO: today (list of all tasks/projects/workslots)
-
 import argparse
 import datetime
 import os.path
-import pickle
+import pytz
 
 from task import Task
 from util import format_timedelta, group_by
-from worktime import WorkSlot, parse_interval, parse_timedelta
+from worktime import WorkSlot
+from nlp.parsers import parse_timedelta, parse_interval
 
 
 # Public fields and methods.
@@ -50,24 +48,26 @@ class Session(object):
     """
     def __init__(self):
         # Set the default configuration.
-        self.config = dict()
-        self.config['CFG_PROJECTS_FNAME'] = 'projects.lst'
-        self.config['CFG_TASKS_FNAME_IN'] = 'tasks.xml'
-        self.config['CFG_TASKS_FTYPE_IN'] = FTYPE_XML
-        self.config['CFG_TASKS_FNAME_OUT'] = 'tasks.xml'
-        self.config['CFG_TASKS_FTYPE_OUT'] = FTYPE_XML
-        self.config['CFG_LOG_FNAME_IN'] = 'tasks.xml'
-        self.config['CFG_LOG_FTYPE_IN'] = FTYPE_XML
-        self.config['CFG_LOG_FNAME_OUT'] = 'tasks.xml'
-        self.config['CFG_LOG_FTYPE_OUT'] = FTYPE_XML
-        self.config['CFG_TIME_FORMAT_USER'] = '%d %b %Y %H:%M:%S %Z'
-        self.config['CFG_TIME_FORMAT_REPR'] = '%Y-%m-%d %H:%M:%S'
+        self.config = {
+            'PROJECTS_FNAME': 'projects.lst',
+            'TASKS_FNAME_IN': 'tasks.xml',
+            'TASKS_FTYPE_IN': FTYPE_XML,
+            'TASKS_FNAME_OUT': 'tasks.xml',
+            'TASKS_FTYPE_OUT': FTYPE_XML,
+            'LOG_FNAME_IN': 'tasks.xml',
+            'LOG_FTYPE_IN': FTYPE_XML,
+            'LOG_FNAME_OUT': 'tasks.xml',
+            'LOG_FTYPE_OUT': FTYPE_XML,
+            'TIME_FORMAT_USER': '%d %b %Y %H:%M:%S %Z',
+            'TIME_FORMAT_REPR': '%Y-%m-%d %H:%M:%S',
+            'TIMEZONE': pytz.utc,
+        }
         # Initialise fields.
         self.projects = []
         # TODO Devise a more suitable data structure to keep tasks in
         # memory.
         self.tasks = []
-        self.wtimes = []
+        self.wslots = []
         # Auxiliary variables.
         self._xml_header_written = False
 
@@ -83,19 +83,23 @@ class Session(object):
         if os.path.exists(cfg_fname):
             with open(cfg_fname, encoding="UTF-8") as cfg_file:
                 for line in cfg_file:
-                    # TODO Extend. This assumes
                     cfg_key, cfg_value = map(str.strip,
                                              line.strip().split('=', 2))
                     # TODO Extend. There can be more various actions to be done
                     # when a value is set in the config file.
-                    self.config[cfg_key] = cfg_value
+                    if cfg_key == 'TIMEZONE':
+                        self.config['TIMEZONE'] = pytz.timezone(cfg_value)
+                        # TODO Catch UnknownTimeZoneError and raise
+                        # a ConfigError.
+                    else:
+                        self.config[cfg_key] = cfg_value
 
     def read_projects(self, infname=None):
         """
         TODO: Write docstring.
         """
         if infname is None:
-            infname = self.config['CFG_PROJECTS_FNAME']
+            infname = self.config['PROJECTS_FNAME']
         with open(infname) as infile:
             self.projects = sorted([proj.rstrip('\n') for proj in infile])
 
@@ -113,7 +117,7 @@ class Session(object):
                 pprint(project)
             print("")
         if outfname is None:
-            outfname = self.config['CFG_PROJECTS_FNAME']
+            outfname = self.config['PROJECTS_FNAME']
         with open(outfname, 'w') as outfile:
             for project in self.projects:
                 outfile.write(project + '\n')
@@ -127,8 +131,8 @@ class Session(object):
 
         """
         if infname is None:
-            infname = self.config['CFG_TASKS_FNAME_IN']
-            inftype = self.config['CFG_TASKS_FTYPE_IN']
+            infname = self.config['TASKS_FNAME_IN']
+            inftype = self.config['TASKS_FTYPE_IN']
         # This is a primitive implementation for the backend as a CSV.
         if inftype == FTYPE_CSV:
             import csv
@@ -141,6 +145,7 @@ class Session(object):
             with open(infname, 'rb') as infile:
                 self.tasks = XmlBackend.read_tasks(self, infile)
         elif inftype == FTYPE_PICKLE:
+            import pickle
             if not os.path.exists(infname):
                 open(infname, 'wb').close()
             with open(infname, 'rb') as infile:
@@ -169,8 +174,8 @@ class Session(object):
                 pprint(task)
             print("")
         if outfname is None:
-            outfname = self.config['CFG_TASKS_FNAME_OUT']
-            outftype = self.config['CFG_TASKS_FTYPE_OUT']
+            outfname = self.config['TASKS_FNAME_OUT']
+            outftype = self.config['TASKS_FTYPE_OUT']
         if outftype == FTYPE_CSV:
             import csv
             with open(outfname, newline='') as outfile:
@@ -193,6 +198,7 @@ class Session(object):
                     outfile.write(b'</wyrdinData>\n')
                 self._xml_header_written = True
         elif outftype == FTYPE_PICKLE:
+            import pickle
             with open(outfname, 'wb') as outfile:
                 for task in self.tasks:
                     pickle.dump(task, outfile)
@@ -206,23 +212,24 @@ class Session(object):
         # a subset of the log needs to be read. In the latter case, allow for
         # doing so.
         if infname is None:
-            infname = self.config['CFG_LOG_FNAME_IN']
-            inftype = self.config['CFG_LOG_FTYPE_IN']
+            infname = self.config['LOG_FNAME_IN']
+            inftype = self.config['LOG_FTYPE_IN']
         if inftype == FTYPE_PICKLE:
+            import pickle
             if not os.path.exists(infname):
                 open(infname, 'wb').close()
             with open(infname, 'rb') as infile:
-                self.wtimes = []
+                self.wslots = []
                 while True:
                     try:
                         worktime = pickle.load(infile)
-                        self.wtimes.append(worktime)
+                        self.wslots.append(worktime)
                     except EOFError:
                         break
         elif inftype == FTYPE_XML:
             from backend.xml import XmlBackend
             with open(infname, 'rb') as infile:
-                self.wtimes = XmlBackend.read_workslots(self, infile)
+                self.wslots = XmlBackend.read_workslots(self, infile)
         else:
             raise NotImplementedError("Session.read_log() is not "
                                       "implemented for this type of files.")
@@ -230,11 +237,12 @@ class Session(object):
     def write_log(self, outfname=None, outftype=None):
         """TODO: Update docstring."""
         if outfname is None:
-            outfname = self.config['CFG_LOG_FNAME_OUT']
-            outftype = self.config['CFG_LOG_FTYPE_OUT']
+            outfname = self.config['LOG_FNAME_OUT']
+            outftype = self.config['LOG_FTYPE_OUT']
         if outftype == FTYPE_PICKLE:
+            import pickle
             with open(outfname, 'wb') as outfile:
-                for wtime in self.wtimes:
+                for wtime in self.wslots:
                     pickle.dump(wtime, outfile)
         elif outftype == FTYPE_XML:
             from backend.xml import XmlBackend
@@ -247,7 +255,7 @@ class Session(object):
                     # "</wyrdinData>").
                     outfile.seek(-len(b'</wyrdinData>\n'), 2)
                 XmlBackend.write_workslots(
-                    self, self.wtimes, outfile, standalone=not
+                    self, self.wslots, outfile, standalone=not
                     self._xml_header_written)
                 if self._xml_header_written:
                     outfile.write(b'</wyrdinData>\n')
@@ -264,19 +272,19 @@ class Session(object):
         """
         self.write_projects()
         if tasks_ftype is None:
-            tasks_ftype = self.config['CFG_TASKS_FTYPE_OUT']
+            tasks_ftype = self.config['TASKS_FTYPE_OUT']
         if log_ftype is None:
-            log_ftype = self.config['CFG_LOG_FTYPE_OUT']
+            log_ftype = self.config['LOG_FTYPE_OUT']
         if tasks_fname is None:
-            tasks_fname = self.config['CFG_TASKS_FNAME_OUT']
+            tasks_fname = self.config['TASKS_FNAME_OUT']
         if log_fname is None:
-            log_fname = self.config['CFG_LOG_FNAME_OUT']
+            log_fname = self.config['LOG_FNAME_OUT']
         # The only special case so far.
         if (tasks_ftype == FTYPE_XML and log_ftype == FTYPE_XML
                 and tasks_fname == log_fname):
             from backend.xml import XmlBackend
             with open(tasks_fname, 'wb') as outfile:
-                XmlBackend.write_all(self, self.tasks, self.wtimes, outfile)
+                XmlBackend.write_all(self, self.tasks, self.wslots, outfile)
         else:
             # FIXME: The type of file is not looked at, unless the file name is
             # supplied too. Provide some default filename for the supported
@@ -286,7 +294,7 @@ class Session(object):
 
     def find_open_slots(self):
         """Returns work slots that are currently open."""
-        return [slot for slot in self.wtimes if slot.end is None]
+        return [slot for slot in self.wslots if slot.end is None]
 
     def remove_project(self, project):
         tasks = filter(lambda task: task.project == project, self.tasks)
@@ -298,13 +306,13 @@ class Session(object):
         return filter(lambda task: task.id == task_id, self.tasks).__next__()
 
     def remove_task(self, task):
-        slots = filter(lambda slot: slot.task == task, self.wtimes)
+        slots = filter(lambda slot: slot.task == task, self.wslots)
         for slot in slots:
             self.remove_workslot(slot)
         self.tasks.remove(task)
 
     def remove_workslot(self, slot):
-        self.wtimes.remove(slot)
+        self.wslots.remove(slot)
 
 
 def _init_argparser(arger):
@@ -362,8 +370,11 @@ def _init_argparser(arger):
                                         help="Prints out the current status "\
                                              "info.")
     arger_status.set_defaults(func=status)
+    parse_tz_interval = lambda intstr: parse_interval(
+            intstr,
+            tz=session.config['TIMEZONE'])
     arger_status.add_argument('-t', '--time',
-                              type=parse_interval,
+                              type=parse_tz_interval,
                               action='append',
                               help="Filter work slots by time.")
     arger_status.add_argument('-a', '--all',
@@ -439,10 +450,10 @@ def print_help(args):
 
 def begin(args):
     task = frontend.get_task(session)
-    start = datetime.datetime.now() + args.adjust
+    start = datetime.datetime.now(session.config['TIMEZONE']) + args.adjust
     # TODO Make the Session object take care for accounting related to adding
     # work slots, tasks etc.
-    session.wtimes.append(WorkSlot(task=task, start=start))
+    session.wslots.append(WorkSlot(task=task, start=start))
     if task not in session.tasks:
         session.tasks.append(task)
         if ('project' in task.__dict__
@@ -453,7 +464,7 @@ def begin(args):
 
 
 def end(args):
-    end = datetime.datetime.now() + args.adjust
+    end = datetime.datetime.now(session.config['TIMEZONE']) + args.adjust
     open_slots = session.find_open_slots()
     if not open_slots:
         print("You have not told me you have been doing something. Use "
@@ -486,7 +497,7 @@ def retro(args):
     slot = frontend.get_workslot(session)
     if args.done:
         slot.task.done = True
-    session.wtimes.append(slot)
+    session.wslots.append(slot)
 
 
 def status(args):
@@ -501,7 +512,7 @@ def status(args):
     else:
         filter_open = lambda _: True
     # Select work slots matching the selection criteria..
-    slots = [slot for slot in session.wtimes \
+    slots = [slot for slot in session.wslots \
              if filter_time(slot) and filter_open(slot)]
 
     if not slots:
@@ -510,7 +521,7 @@ def status(args):
     else:
         # FIXME Update the message, especially in case when called with --all.
         print("You have been working on the following tasks:")
-        now = datetime.datetime.now()
+        now = datetime.datetime.now(session.config['TIMEZONE'])
         task2slot = group_by(slots, "task", single_attr=True)
         for task in task2slot:
             task_slots = task2slot[task]

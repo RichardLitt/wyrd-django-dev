@@ -40,9 +40,14 @@ class XmlBackend(object):
             task_e.set('time', cls._timedelta_repr(task.time))
         if 'deadline' in task.__dict__:
             task_e.set('deadline', datetime.strftime(
-                task.deadline, session.config['CFG_TIME_FORMAT_REPR']))
+                task.deadline, session.config['TIME_FORMAT_REPR']))
             if task.deadline.tzinfo:
                 task_e.set('deadline_tz', task.deadline.tzname())
+        if 'prerequisites' in task.__dict__ and task.prerequisites:
+            task_e.set('prerequisites',
+                       ', '.join(map(lambda prereq: prereq.short_repr(),
+                                     task.prerequisites)))
+             # 'enables': {'type': list, 'editable': True},
         task_e.text = task.name
         return task_e
 
@@ -100,7 +105,7 @@ class XmlBackend(object):
                 if 'deadline' in attrs:
                     task.deadline = datetime.strptime(
                         attrs['deadline'],
-                        session.config['CFG_TIME_FORMAT_REPR'])
+                        session.config['TIME_FORMAT_REPR'])
                     if 'deadline_tz' in attrs:
                         task.deadline = task.deadline.replace(
                             tzinfo=pytz.timezone(attrs['deadline_tz']))
@@ -115,10 +120,10 @@ class XmlBackend(object):
                                task=str(slot.task.id))
         if slot.start is not None:
             slot_e.set('start', datetime.strftime(
-                slot.start, session.config['CFG_TIME_FORMAT_REPR']))
+                slot.start, session.config['TIME_FORMAT_REPR']))
         if slot.end is not None:
             slot_e.set('end', datetime.strftime(
-                slot.end, session.config['CFG_TIME_FORMAT_REPR']))
+                slot.end, session.config['TIME_FORMAT_REPR']))
         return slot_e
 
     @classmethod
@@ -152,11 +157,11 @@ class XmlBackend(object):
                 task = session.get_task(task_id)
                 start = (datetime.strptime(
                             attrs['start'],
-                            session.config['CFG_TIME_FORMAT_REPR'])
+                            session.config['TIME_FORMAT_REPR'])
                          if 'start' in attrs else None)
                 end = (datetime.strptime(
                             attrs['end'],
-                            session.config['CFG_TIME_FORMAT_REPR'])
+                            session.config['TIME_FORMAT_REPR'])
                        if 'end' in attrs else None)
                 slot = WorkSlot(task=task, start=start, end=end, id=id_)
                 slots.append(slot)

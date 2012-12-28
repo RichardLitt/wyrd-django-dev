@@ -33,3 +33,12 @@ class DBObject(object):
     @property
     def id(self):
         return self._id
+
+    def short_repr(self):
+        """Returns a short string which identifies the object and its type
+        within the set of objects created in this WyrdIn application.
+
+        """
+        raise NotImplementedError(('{cls} does not implement the '
+                                  "required method `short_repr'.").format(
+                                      cls=self.__class__.__name__))

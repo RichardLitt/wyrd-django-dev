@@ -11,8 +11,9 @@ https://github.com/WyrdIn
 """
 from collections import Mapping
 
-from worktime import parse_timedelta, parse_datetime, WorkSlot
+from worktime import WorkSlot
 from task import Task
+from nlp.parsers import parse_timedelta, parse_datetime, get_parser
 
 
 # TODO: Inherit from IFrontend (to be implemented).
@@ -100,7 +101,8 @@ class Cli(object):
                     if time:
                         task.time = parse_timedelta(time)
                     if deadline:
-                        task.deadline = parse_datetime(deadline)
+                        task.deadline = parse_datetime(
+                            deadline, tz=session.config['TIMEZONE'])
         return task
 
     @staticmethod
@@ -181,19 +183,20 @@ class Cli(object):
     @staticmethod
     def get_workslot(session):
         task = Cli.get_task(session, ask_details=False)
-        start = Cli.get_datetime(prompt="What was the start time?")
-        end = Cli.get_datetime(prompt="What was the end time?",
+        start = Cli.get_datetime(session, prompt="What was the start time?")
+        end = Cli.get_datetime(session,
+                               prompt="What was the end time?",
                                validate=(lambda end: end >= start))
         return WorkSlot(task=task, start=start, end=end)
 
     @staticmethod
-    def get_datetime(prompt, validate=None):
+    def get_datetime(session, prompt, validate=None):
         print(prompt)
         in_dt = None
         while in_dt is None:
             in_str = input("> ").strip()
             try:
-                in_dt = parse_datetime(in_str)
+                in_dt = parse_datetime(in_str, tz=session.config['TIMEZONE'])
             except ValueError as error:
                 print("Error: {err!s}".format(err=error))
         return in_dt
@@ -229,11 +232,12 @@ class Cli(object):
         print("Enter the new value.")
         value = None
         attr_type = Task.slots[attr]['type']
+        parser = get_parser(attr_type)
         while value is None:
             value = input("> ")
             # Check the type of the value.
             try:
-                value = attr_type(value)
+                value = parser(value)
             except:
                 value = None
         return attr, value
