@@ -1,0 +1,9 @@
+Session.vim
+*.pyc
+*.sw?
+/tasks.*
+/projects.lst
+tmp_*
+__pycache__
+.ropeproject
+/timelog.*

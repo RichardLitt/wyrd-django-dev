@@ -13,6 +13,10 @@ from lxml import etree
 from datetime import datetime, timedelta
 import pytz
 
+from grouping import SoeGrouping, AndGroup, OrGroup, ListGroup
+from task import Task
+from wyrdin import session
+
 
 # TODO: Inherit from IBackend (to be implemented).
 class XmlBackend(object):
@@ -29,7 +33,7 @@ class XmlBackend(object):
         return timedelta(days=int(parts[0]), seconds=int(parts[2]))
 
     @classmethod
-    def _create_task_e(cls, session, task):
+    def _create_task_e(cls, task):
         """Creates an XML element for an object of the type Task."""
         task_e = etree.Element("task",
                                id=str(task.id),
@@ -52,13 +56,51 @@ class XmlBackend(object):
         return task_e
 
     @classmethod
-    def write_tasks(cls, session, tasks, outfile, standalone=True):
-        """Writes out a list of tasks in the XML format to the open file
+    def _create_group_e(cls, group, seen=None):
+        """Creates an XML element for an object of the type SoeGrouping.
+
+        Keyword arguments:
+            - group: the SoeGrouping object
+            - seen: a set of group objects that have been seen during the
+                    traversal (only for internal purposes)
+
+        """
+        if seen is None:
+            seen = set()
+
+        group_e = etree.Element("group",
+                               id=str(group.short_repr()),
+                               type=grp.__class__.name)
+        for member in group.members:
+            if isinstance(member, Task):
+                task_e = etree.SubElement(group_e, "task")
+                task_e.set('id', member.id)
+            else:
+                assert isinstance(member, SoeGrouping)
+                assert member.__class__ != SoeGrouping
+                member_e = etree.SubElement(group_e, "group")
+                member_e.set(id=str(member.short_repr()))
+                member_e.set(type=member.__class__.name)
+                # If this group was seen previously, do not go into it again.
+                # Else, add it to the set of seen groups and do recur.
+                if member not in seen:
+                    seen.add(member)
+                    member_e = Cli._create_group_e(member, seen=seen)
+                    group_e.append(member_e)
+        return group_e
+
+    @classmethod
+    def write_tasks(cls, tasks, groups, outfile, standalone=True):
+        """
+        DEPRECATED!!! In case standalone == False, puts <groups> below <tasks>.
+
+        Writes out a list of tasks in the XML format to the open file
         `outfile'.
 
         Keyword arguments:
             - session: the global object for the user session
             - tasks: an iterable of objects of the type Task
+            - groups: an iterable of objects of the type SoeGrouping
             - outfile: a file open for writing, to which the tasks should be
                        written
             - standalone: whether a complete XML content should be written to
@@ -71,15 +113,16 @@ class XmlBackend(object):
         else:
             top_e = tasks_e = etree.Element('tasks')
         for task in tasks:
-            tasks_e.append(cls._create_task_e(session, task))
+            tasks_e.append(cls._create_task_e(task))
+        for group in groups:
+            top_e.append(cls_create_group_e(group))
         outfile.write(etree.tostring(top_e,
                                      encoding='UTF-8',
                                      pretty_print=True,
                                      xml_declaration=standalone))
 
     @classmethod
-    def read_tasks(cls, session, infile):
-        from task import Task
+    def read_tasks(cls, infile):
         tasks = []
         for _, elem in etree.iterparse(infile):
             # Stop reading as soon as the </tasks> tag is encountered.
@@ -112,8 +155,68 @@ class XmlBackend(object):
                 tasks.append(task)
         return tasks
 
+
+    _typestr2cls = {'and': AndGroup,
+                    'or': OrGroup,
+                    'list': ListGroup}
+    # TODO: It might be advantageous to switch to parsing the XML once into
+    # a tree and reading all from the tree afterwards...
     @classmethod
-    def _create_slot_e(cls, session, slot):
+    def read_groups(cls, tasks, infile):
+        """Reads SoeGroupings from an XML file.
+
+        Keyword arguments:
+            - tasks: a mapping of known task IDs to the corresponding task
+              objects
+            - infile: an open XML file to read the groupings from
+
+        """
+        groups = []  # the list of groups to be returned
+        groups_map = {}  # short_repr -> group
+        groups_branch = []  # branch of nested groups currently open
+        in_groups = False
+        for event, elem in etree.iterparse(infile, events=('start', 'end')):
+            # Stop reading as soon as the </groups> tag is encountered.
+            if in_groups:
+                if elem.tag == "groups":
+                    break
+            # Check whether we have reached the <groups> element yet.
+            else:
+                if elem.tag == "groups" and event == "start":
+                    in_groups = True
+                else:
+                    continue
+            # Parse each <group> element in accordance to the way it was
+            # output.
+            if elem.tag == "group":
+                if event == "start":
+                    # Open a new group.
+                    grp_type = elem.get('type')
+                    cur_group = _typestr2cls(grp_type)()
+                    # Remember the group by its short_repr.
+                    cur_repr = cur_group.short_repr()
+                    if cur_repr in groups_map:
+                        cur_group = groups_map[cur_repr]
+                    else:
+                        groups_map[cur_repr] = cur_group
+                    # Put the group to its place.
+                    if groups_branch:
+                        groups_branch[-1].elems.append(cur_group)
+                    groups_branch.append(cur_group)
+                # If event == "end",
+                else:
+                    # Close the current group.
+                    if len(groups_branch) == 1:
+                        groups.append(groups_branch[0])
+            else:
+                assert elem.tag == "task"
+                if event == "start":
+                    task = tasks[elem.get('id')]
+                    groups_branch[-1].append(task)
+        return groups
+
+    @classmethod
+    def _create_slot_e(cls, slot):
         """Creates an XML element for an object of the type WorkSlot."""
         slot_e = etree.Element('workslot',
                                id=str(slot.id),
@@ -127,21 +230,21 @@ class XmlBackend(object):
         return slot_e
 
     @classmethod
-    def write_workslots(cls, session, slots, outfile, standalone=True):
+    def write_workslots(cls, slots, outfile, standalone=True):
         if standalone:
             top_e = wyrdin_e = etree.Element('wyrdinData')
             slots_e = etree.SubElement(wyrdin_e, 'workslots')
         else:
             top_e = slots_e = etree.Element('workslots')
         for slot in slots:
-            slots_e.append(cls._create_slot_e(session, slot))
+            slots_e.append(cls._create_slot_e(slot))
         outfile.write(etree.tostring(top_e,
                                      encoding='UTF-8',
                                      pretty_print=True,
                                      xml_declaration=standalone))
 
     @classmethod
-    def read_workslots(cls, session, infile):
+    def read_workslots(cls, infile):
         from worktime import WorkSlot
         slots = []
         for _, elem in etree.iterparse(infile):
@@ -170,13 +273,14 @@ class XmlBackend(object):
     # XXX This name is not the best possible. `all' still does not include
     # projects, just tasks and work slots.
     @classmethod
-    def write_all(cls, session, tasks, slots, outfile):
+    def write_all(cls, tasks, groups, slots, outfile):
         """Writes out a list of tasks and work slots in the XML format to the
         open file `outfile'.
 
         Keyword arguments:
             - session: the global object for the user session
             - tasks: an iterable of objects of the type Task
+            - groups: an iterable of objects of the type SoeGrouping
             - slots: an iterable of objects of the type WorkSlot
             - outfile: a file open for writing, to which the tasks should be
                        written
@@ -186,9 +290,11 @@ class XmlBackend(object):
         tasks_e = etree.SubElement(wyrdin_e, 'tasks')
         slots_e = etree.SubElement(wyrdin_e, 'workslots')
         for task in tasks:
-            tasks_e.append(cls._create_task_e(session, task))
+            tasks_e.append(cls._create_task_e(task))
+        for group in groups:
+            tasks_e.append(cls_create_group_e(group))
         for slot in slots:
-            slots_e.append(cls._create_slot_e(session, slot))
+            slots_e.append(cls._create_slot_e(slot))
         outfile.write(etree.tostring(wyrdin_e,
                                      encoding='UTF-8',
                                      pretty_print=True,

@@ -13,13 +13,10 @@ import datetime
 import os.path
 import pytz
 
-from task import Task
-from util import format_timedelta, group_by
-from worktime import WorkSlot
 from nlp.parsers import parse_timedelta, parse_interval
 
 
-# Public fields and methods.
+# TODO Public fields and methods.
 __all__ = []
 
 # Constants
@@ -61,6 +58,7 @@ class Session(object):
             'TIME_FORMAT_USER': '%d %b %Y %H:%M:%S %Z',
             'TIME_FORMAT_REPR': '%Y-%m-%d %H:%M:%S',
             'TIMEZONE': pytz.utc,
+            'BACKUP_SUFFIX': '~',
         }
         # Initialise fields.
         self.projects = []
@@ -68,6 +66,7 @@ class Session(object):
         # memory.
         self.tasks = []
         self.wslots = []
+        self.groups = []
         # Auxiliary variables.
         self._xml_header_written = False
 
@@ -143,7 +142,7 @@ class Session(object):
         elif inftype == FTYPE_XML:
             from backend.xml import XmlBackend
             with open(infname, 'rb') as infile:
-                self.tasks = XmlBackend.read_tasks(self, infile)
+                self.tasks = XmlBackend.read_tasks(infile)
         elif inftype == FTYPE_PICKLE:
             import pickle
             if not os.path.exists(infname):
@@ -162,7 +161,8 @@ class Session(object):
 
     def write_tasks(self, outfname=None, outftype=None):
         """
-        Writes out the current list of tasks from memory to a file.
+        Writes out the current list of tasks and task groupings from memory to
+        a file.
 
         TODO: Update docstring.
 
@@ -177,11 +177,14 @@ class Session(object):
             outfname = self.config['TASKS_FNAME_OUT']
             outftype = self.config['TASKS_FTYPE_OUT']
         if outftype == FTYPE_CSV:
+            # FIXME: May have been broken when groups were added.
             import csv
             with open(outfname, newline='') as outfile:
                 taskwriter = csv.writer(outfile)
                 for task in self.tasks:
                     taskwriter.writerow(task)
+                for group in self.groups:
+                    groupwriter.writerow(group)
         elif outftype == FTYPE_XML:
             from backend.xml import XmlBackend
             mode = 'r+b' if self._xml_header_written else 'wb'
@@ -192,7 +195,8 @@ class Session(object):
                     outfile.seek(-len(b'</wyrdinData>\n'), 2)
                 else:
                     outfile.seek(0, 2)
-                XmlBackend.write_tasks(self, self.tasks, outfile,
+                XmlBackend.write_tasks(self.tasks, self.groups,
+                                       outfile=outfile,
                                        standalone=not self._xml_header_written)
                 if self._xml_header_written:
                     outfile.write(b'</wyrdinData>\n')
@@ -202,6 +206,8 @@ class Session(object):
             with open(outfname, 'wb') as outfile:
                 for task in self.tasks:
                     pickle.dump(task, outfile)
+                for group in self.groups:
+                    pickle.dump(group, outfile)
         else:
             raise NotImplementedError("Session.write_tasks() is not "
                                       "implemented for this type of files.")
@@ -229,7 +235,7 @@ class Session(object):
         elif inftype == FTYPE_XML:
             from backend.xml import XmlBackend
             with open(infname, 'rb') as infile:
-                self.wslots = XmlBackend.read_workslots(self, infile)
+                self.wslots = XmlBackend.read_workslots(infile)
         else:
             raise NotImplementedError("Session.read_log() is not "
                                       "implemented for this type of files.")
@@ -254,8 +260,7 @@ class Session(object):
                     # Skip before the last line (assumed to read
                     # "</wyrdinData>").
                     outfile.seek(-len(b'</wyrdinData>\n'), 2)
-                XmlBackend.write_workslots(
-                    self, self.wslots, outfile, standalone=not
+                XmlBackend.write_workslots(self.wslots, outfile, not
                     self._xml_header_written)
                 if self._xml_header_written:
                     outfile.write(b'</wyrdinData>\n')
@@ -266,10 +271,11 @@ class Session(object):
 
     def write_all(self, tasks_ftype=None, tasks_fname=None,
                   log_ftype=None, log_fname=None):
-        """Writes out projects, tasks, and working slots to files as dictated
-        by configuration settings.
+        """Writes out projects, tasks, task groupings, and working slots to
+        files as dictated by configuration settings.
 
         """
+        from shutil import copy2, move
         self.write_projects()
         if tasks_ftype is None:
             tasks_ftype = self.config['TASKS_FTYPE_OUT']
@@ -283,8 +289,19 @@ class Session(object):
         if (tasks_ftype == FTYPE_XML and log_ftype == FTYPE_XML
                 and tasks_fname == log_fname):
             from backend.xml import XmlBackend
-            with open(tasks_fname, 'wb') as outfile:
-                XmlBackend.write_all(self, self.tasks, self.wslots, outfile)
+            # TODO: Write a context manager (with xxx as yyy: zzz) for writing
+            #       a file with a backup.
+            # TODO: Do this at other places too.
+            # TODO: Handle the case the target file does not exist currently.
+            bak_fname = tasks_fname + self.config['BACKUP_SUFFIX']
+            copy2(tasks_fname, bak_fname)
+            try:
+                with open(tasks_fname, 'wb') as outfile:
+                    XmlBackend.write_all(self.tasks, self.groups, self.wslots,
+                                         outfile)
+            except Exception as e:
+                move(bak_fname, tasks_fname)
+                raise e
         else:
             # FIXME: The type of file is not looked at, unless the file name is
             # supplied too. Provide some default filename for the supported
@@ -449,7 +466,7 @@ def print_help(args):
 
 
 def begin(args):
-    task = frontend.get_task(session)
+    task = frontend.get_task()
     start = datetime.datetime.now(session.config['TIMEZONE']) + args.adjust
     # TODO Make the Session object take care for accounting related to adding
     # work slots, tasks etc.
@@ -477,8 +494,7 @@ def end(args):
     # If more tasks are currently open, let the user specify which one is to be
     # ended.
     else:
-        task = frontend.get_task(session,
-                                 map(lambda slot: slot.task, open_slots))
+        task = frontend.get_task(map(lambda slot: slot.task, open_slots))
     if args.done:
         task.done = True
     slots_affected = [slot for slot in open_slots if slot.task is task]
@@ -494,7 +510,7 @@ def end(args):
 
 def retro(args):
     print("Recording a worktime in retrospect...")
-    slot = frontend.get_workslot(session)
+    slot = frontend.get_workslot()
     if args.done:
         slot.task.done = True
     session.wslots.append(slot)
@@ -547,7 +563,7 @@ def projects(args):
 
     # Define subcommand functions.
     def list():
-        frontend.list_projects(session, args.verbose)
+        frontend.list_projects(args.verbose)
 
     def add():
         print("Adding a project...")
@@ -561,7 +577,7 @@ def projects(args):
 
     def remove():
         print("Removing a project...")
-        project = frontend.get_project(session, accept_empty=False)
+        project = frontend.get_project(False)
         # Remove the project.
         session.remove_project(project)
         print(("The project '{}' and all dependent tasks have been "
@@ -582,18 +598,18 @@ def tasks(args):
 
     # Define subcommand functions.
     def list():
-        frontend.list_tasks(session, verbose=args.verbose)
+        frontend.list_tasks(args.verbose)
 
     def add():
         print("Adding a task...")
-        task = frontend.get_task(session)
+        task = frontend.get_task()
         session.tasks.append(task)
         print("The task '{}' has been added successfully."\
               .format(str(task).lstrip()))
 
     def modify():
         print("Modifying a task...")
-        task = frontend.get_task(session, session.tasks)
+        task = frontend.get_task(session.tasks)
         attr, val = frontend.modify_task(task)
         if attr in Task.slots:
             print("Setting {attr} to {val!s}...".format(attr=attr, val=val))
@@ -603,7 +619,7 @@ def tasks(args):
 
     def remove():
         print("Removing a task...")
-        task = frontend.get_task(session, session.tasks)
+        task = frontend.get_task(session.tasks)
         session.remove_task(task)
         print("The task '{}' has been removed successfully.".format(task))
 
@@ -622,12 +638,24 @@ if __name__ == "__main__":
     if DEBUG:
         from pprint import pprint
 
-    # Read arguments and configuration.
+    # Read arguments and configuration, initiate the user session.
     arger = argparse.ArgumentParser()
     _init_argparser(arger)
     _process_args(arger)
     session = Session()
     session.read_config(_cl_args)
+    # A python gotcha -- the main module gets loaded twice, once as the main
+    # module, and second time when imported by other modules. Therefore, any
+    # globals that should be visible when imported have to be explicitly
+    # assigned here. Solution inspired by
+    # http://codebright.wordpress.com/2011/06/15/globals-and-__main__-a-python-gotcha/.
+    import wyrdin
+    wyrdin.session = session
+
+    # Do imports that depend on an existing session.
+    from task import Task
+    from util import format_timedelta, group_by
+    from worktime import WorkSlot
 
     # Read data.
     session.read_projects()

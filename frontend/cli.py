@@ -11,17 +11,19 @@ https://github.com/WyrdIn
 """
 from collections import Mapping
 
-from worktime import WorkSlot
-from task import Task
 from nlp.parsers import parse_timedelta, parse_datetime, get_parser
+from task import Task
+from worktime import WorkSlot
+from wyrdin import session
 
 
-# TODO: Inherit from IFrontend (to be implemented).
+# TODO: Inherit from IFrontend (to be implemented) once alternatives are
+# programmed.
 class Cli(object):
     """ Basic command-line user interface. """
 
     @staticmethod
-    def get_task(session, selection=None, ask_details=True):
+    def get_task(selection=None, ask_details=True):
         """ Asks the user for a task from a given selection or a new one.
 
         Keyword arguments:
@@ -90,8 +92,7 @@ class Cli(object):
                     task = str2task[taskname]
             if task is None:
                 # Create a new task, asking for optional details.
-                project = Cli.get_project(
-                    session, prompt="What project does it belong to?")
+                project = Cli.get_project(prompt="What project does it belong to?")
                 task = Task(taskname, project)
                 if ask_details:
                     print("Estimated time?")
@@ -128,7 +129,7 @@ class Cli(object):
         print("")
 
     @staticmethod
-    def get_project(session, accept_empty=True, prompt=None):
+    def get_project(accept_empty=True, prompt=None):
         """Solicits a project name from the user.
 
         Keyword arguments:
@@ -181,16 +182,14 @@ class Cli(object):
         return project
 
     @staticmethod
-    def get_workslot(session):
-        task = Cli.get_task(session, ask_details=False)
-        start = Cli.get_datetime(session, prompt="What was the start time?")
-        end = Cli.get_datetime(session,
-                               prompt="What was the end time?",
-                               validate=(lambda end: end >= start))
+    def get_workslot():
+        task = Cli.get_task(ask_details=False)
+        start = Cli.get_datetime("What was the start time?")
+        end = Cli.get_datetime("What was the end time?", (lambda end: end >= start))
         return WorkSlot(task=task, start=start, end=end)
 
     @staticmethod
-    def get_datetime(session, prompt, validate=None):
+    def get_datetime(prompt, validate=None):
         print(prompt)
         in_dt = None
         while in_dt is None:
@@ -212,8 +211,8 @@ class Cli(object):
                     val = task.__getattribute__(attr)
                 except AttributeError:
                     val = None
-                print ("    {attr: >10}".format(attr=attr) +
-                    ('  (current value: "{val!s}")'.format(val=val)
+                print ("    {attr: >13}".format(attr=attr) +
+                    ('  ("{val!s}")'.format(val=val)
                         if val is not None else ''))
             instr = input("> ").strip()
             if instr in Task.slots:
@@ -233,17 +232,18 @@ class Cli(object):
         value = None
         attr_type = Task.slots[attr]['type']
         parser = get_parser(attr_type)
+        orig_val = task.__dict__.get(attr, None)
         while value is None:
             value = input("> ")
             # Check the type of the value.
             try:
-                value = parser(value)
+                value = parser(value, orig=orig_val)
             except:
                 value = None
         return attr, value
 
     @staticmethod
-    def list_projects(session, verbose=False):
+    def list_projects(verbose=False):
         # TODO Implement verbosity.
         print("List of current projects:")
         for project in sorted(session.projects):
@@ -251,7 +251,7 @@ class Cli(object):
         print("")
 
     @staticmethod
-    def list_tasks(session, verbose=False):
+    def list_tasks(verbose=False):
         # TODO Say when the tasks were worked on.
         print("List of current tasks:")
         if verbose:

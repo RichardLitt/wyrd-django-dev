@@ -12,10 +12,12 @@ general State and Event.
 
 """
 
-from functools import total_ordering
+from copy import deepcopy
 from datetime import datetime, timedelta
+from functools import total_ordering
 
 from backend.generic import DBObject
+from grouping import SoeGrouping
 
 
 class Theme(object):
@@ -94,8 +96,37 @@ class Plan(object):
         return id(self)
 
 
+class StateOrEvent(DBObject):
+    pass
+
+
+class State(StateOrEvent):
+    """This class represents a state of the world in the broadest sense."""
+
+    def short_repr(self):
+        return 's{id}'.format(id=self.id)
+
+
+class Event(StateOrEvent):
+    """This class represents a one-time event in the real world in the broadest
+    sense.
+
+    """
+    slots = {'id': {'type': int, 'editable': False},
+             'name': {'type': str, 'editable': True},
+             'enables': {'type': list, 'editable': True},
+            }
+    """
+    - name: name of the event
+    - enables: a grouping of soes this event enables when finished
+    """
+
+    def short_repr(self):
+        return 'e{id}'.format(id=self.id)
+
+
 @total_ordering
-class Task(DBObject):
+class Task(Event):
     """
     Task is a (potentially recurrent) event with an actor, generally one that
     is desired by the user. Every task has the actor specified, be it the local
@@ -110,23 +141,24 @@ class Task(DBObject):
     leap years.''
 
     """
-    slots = {'id': {'type': int, 'editable': False},
-             'name': {'type': str, 'editable': True},
-             'project': {'type': str, 'editable': True},
-             'done': {'type': bool, 'editable': True},
-             'time': {'type': timedelta, 'editable': True},
-             'deadline': {'type': datetime, 'editable': True},
-             'prerequisites': {'type': list, 'editable': True},
-             'enables': {'type': list, 'editable': True},
-             }
+    # TODO
+    #   - make prerequisites structured (a Boolex -- a boolean expression,
+    #     built from conjunctions and disjunctions of soes (StateOrEvents))
+    slots = deepcopy(Event.slots)
+    slots.update({'project': {'type': str, 'editable': True},
+                  'done': {'type': bool, 'editable': True},
+                  'time': {'type': timedelta, 'editable': True},
+                  'deadline': {'type': datetime, 'editable': True},
+                  'prerequisites': {'type': SoeGrouping, 'editable': True},
+                 })
     """
-    - name: name of the task
     - project: name of the project (to be changed to a reference to the related
                project object in future)
     - done: has the task been done yet?
     - time: estimated time
     - deadline: date of the deadline (to be changed to a reference to the
                 related Deadline object in future)
+    - prerequisites: a list of prerequisites for this task
     """
     def __init__(self, name, project, id=None):
         """Creates a new task.
@@ -185,25 +217,3 @@ class Task(DBObject):
         self._done = newval
 
 
-class StateOrEvent(DBObject):
-    pass
-
-
-class State(StateOrEvent):
-    """
-    This class represents a state of the world in the broadest sense.
-    """
-
-    def short_repr(self):
-        return 's{id}'.format(id=self.id)
-
-
-class Event(StateOrEvent):
-    """
-    This class represents a one-time event in the real world in the broadest
-    sense.
-
-    """
-
-    def short_repr(self):
-        return 'e{id}'.format(id=self.id)

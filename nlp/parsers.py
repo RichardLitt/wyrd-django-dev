@@ -15,6 +15,7 @@ import re
 
 from datetime import datetime, timedelta, timezone
 from worktime import Interval, dayend, daystart
+from grouping import SoeGrouping, AndGroup, OrGroup, ListGroup
 
 
 _dashes_rx = re.compile('-+')
@@ -27,11 +28,10 @@ _timedelta_rx = re.compile((r'\W*?(?:({flt})\s*d(?:ays?\W+)?\W*?)?'
                         re.IGNORECASE)
 
 
-def parse_datetime(dtstr, tz=None, exact=False):
+def parse_datetime(dtstr, tz=None, exact=False, orig_val=None, **kwargs):
     """ Parses a string into a datetime object.
 
-    Currently merely interprets the string as a floating point number of days
-    from now.
+    Currently merely interprets the string as a timedelta, and adds it to now.
 
     Keyword arguments:
         - dtstr: the string describing the datetime
@@ -40,6 +40,8 @@ def parse_datetime(dtstr, tz=None, exact=False):
               time; the timezone cannot be specified as part of the string)
         - exact: whether an exact datetime should be returned, or whether
                  microseconds should be ignored
+        - orig_val: timezone will be copied from here if none was specified
+                    else
 
     """
     # TODO Crude NLP.
@@ -55,21 +57,25 @@ def parse_datetime(dtstr, tz=None, exact=False):
             exact_dt = dt
             break
 
-    # If keywords did not fire, interpret the string as a floating point number
-    # of days.
+    # If keywords did not fire, interpret the string as a timedelta and add to
+    # datetime.now().
     if exact_dt is None:
         try:
-            exact_dt = datetime.now(tz) + timedelta(days=float(dtstr))
+            exact_dt = datetime.now(tz) + parse_timedelta(dtstr)
         except ValueError:
             raise ValueError('Could not parse datetime from "{arg}".'\
                             .format(arg=dtstr))
 
+    # Try to supply the timezone from the original value.
+    if (exact_dt.tzinfo is None and orig_val is not None
+            and orig_val.tzinfo is not None):
+        exact_dt = exact_dt.replace(tzinfo=orig_val.tzinfo)
     # Round out microseconds (that's part of NLP) unless asked to return the
     # exact datetime.
     return exact_dt if exact else exact_dt.replace(microsecond=0)
 
 
-def parse_timedelta(timestr):
+def parse_timedelta(timestr, **kwargs):
     """ Parses a string into a timedelta object.
 
     """
@@ -108,7 +114,7 @@ def parse_timedelta(timestr):
                             .format(arg=timestr))
 
 
-def parse_interval(ivalstr, tz=None, exact=False):
+def parse_interval(ivalstr, tz=None, exact=False, **kwargs):
     """ Parses a string into an Interval object.
 
     Keyword arguments:
@@ -135,11 +141,24 @@ def parse_interval(ivalstr, tz=None, exact=False):
     return Interval(start, end)
 
 
+def parse_grouping(grpstr, **kwargs):
+    """Parses a string into a Grouping object."""
+    # Tokenise.
+    tokens = list()
+    # TODO Continue here.
+    raise NotImplementedError('Implement parse_grouping.')
+
+
 _type2parser = {datetime: parse_datetime,
-                timedelta: parse_timedelta}
+                timedelta: parse_timedelta,
+                SoeGrouping: parse_grouping}
 
 
 def get_parser(type_):
+    """Returns a parser for the given type. Parsers convert strings into
+    objects of that type.
+
+    """
     # Try to find a defined parser for the type. In case none is defined,
     # return the type itself, as in int("8").
     return _type2parser.get(type_, type_)
