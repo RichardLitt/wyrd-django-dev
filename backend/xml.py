@@ -69,8 +69,8 @@ class XmlBackend(object):
             seen = set()
 
         group_e = etree.Element("group",
-                               id=str(group.short_repr()),
-                               type=grp.__class__.name)
+                                id=str(group.short_repr()),
+                                type=group.__class__.name)
         for member in group.members:
             if isinstance(member, Task):
                 task_e = etree.SubElement(group_e, "task")
@@ -85,7 +85,7 @@ class XmlBackend(object):
                 # Else, add it to the set of seen groups and do recur.
                 if member not in seen:
                     seen.add(member)
-                    member_e = Cli._create_group_e(member, seen=seen)
+                    member_e = XmlBackend._create_group_e(member, seen=seen)
                     group_e.append(member_e)
         return group_e
 
@@ -115,7 +115,7 @@ class XmlBackend(object):
         for task in tasks:
             tasks_e.append(cls._create_task_e(task))
         for group in groups:
-            top_e.append(cls_create_group_e(group))
+            top_e.append(cls._create_group_e(group))
         outfile.write(etree.tostring(top_e,
                                      encoding='UTF-8',
                                      pretty_print=True,
@@ -155,10 +155,10 @@ class XmlBackend(object):
                 tasks.append(task)
         return tasks
 
-
     _typestr2cls = {'and': AndGroup,
                     'or': OrGroup,
                     'list': ListGroup}
+
     # TODO: It might be advantageous to switch to parsing the XML once into
     # a tree and reading all from the tree afterwards...
     @classmethod
@@ -192,7 +192,7 @@ class XmlBackend(object):
                 if event == "start":
                     # Open a new group.
                     grp_type = elem.get('type')
-                    cur_group = _typestr2cls(grp_type)()
+                    cur_group = XmlBackend._typestr2cls(grp_type)()
                     # Remember the group by its short_repr.
                     cur_repr = cur_group.short_repr()
                     if cur_repr in groups_map:
@@ -292,7 +292,7 @@ class XmlBackend(object):
         for task in tasks:
             tasks_e.append(cls._create_task_e(task))
         for group in groups:
-            tasks_e.append(cls_create_group_e(group))
+            tasks_e.append(cls._create_group_e(group))
         for slot in slots:
             slots_e.append(cls._create_slot_e(slot))
         outfile.write(etree.tostring(wyrdin_e,

@@ -9,13 +9,12 @@ https://github.com/WyrdIn
 
 """
 import argparse
-from contextlib import contextmanager
 import datetime
 import os.path
 import pytz
-from shutil import copy2, move
 
 from nlp.parsers import parse_timedelta, parse_interval
+from util import format_timedelta, group_by, open_backed_up
 
 
 # TODO Public fields and methods.
@@ -37,28 +36,6 @@ class ClArgs():
     pass
 
 _cl_args = ClArgs()
-
-
-# Utility functions.
-@contextmanager
-def open_backed_up(fname, mode='r', suffix='~'):
-    # If the file does not exist, create it.
-    if not os.path.exists(fname):
-        open(fname, 'w').close()
-        bak_fname = None
-    # If it does exist, create a backup.
-    else:
-        bak_fname = fname + suffix
-        copy2(fname, bak_fname)
-    try:
-        f = open(fname, mode)
-        yield f
-    except Exception as e:
-        if bak_fname is not None:
-            move(bak_fname, fname)
-        raise e
-    # Closing.
-    f.close()
 
 
 class Session(object):
@@ -213,7 +190,7 @@ class Session(object):
                 for task in self.tasks:
                     taskwriter.writerow(task)
                 for group in self.groups:
-                    groupwriter.writerow(group)
+                    taskwriter.writerow(group)
         elif outftype == FTYPE_XML:
             from backend.xml import XmlBackend
             mode = 'r+b' if self._xml_header_written else 'wb'
@@ -298,8 +275,8 @@ class Session(object):
                     # Skip before the last line (assumed to read
                     # "</wyrdinData>").
                     outfile.seek(-len(b'</wyrdinData>\n'), 2)
-                XmlBackend.write_workslots(self.wslots, outfile, not
-                    self._xml_header_written)
+                XmlBackend.write_workslots(self.wslots, outfile,
+                                           not self._xml_header_written)
                 if self._xml_header_written:
                     outfile.write(b'</wyrdinData>\n')
                 self._xml_header_written = True
@@ -418,8 +395,8 @@ def _init_argparser(arger):
                                              "info.")
     arger_status.set_defaults(func=status)
     parse_tz_interval = lambda intstr: parse_interval(
-            intstr,
-            tz=session.config['TIMEZONE'])
+        intstr,
+        tz=session.config['TIMEZONE'])
     arger_status.add_argument('-t', '--time',
                               type=parse_tz_interval,
                               action='append',
@@ -447,9 +424,9 @@ def _init_argparser(arger):
                               action='store_true',
                               help="Be verbose.")
     arger_proj_l.set_defaults(func=list_projects)
-    arger_proj_r = proj_subargers.add_parser('remove',
-                                             aliases=['r', 'rm', 'del'],
-                                             help="Remove an existing project.")
+    arger_proj_r = proj_subargers.add_parser(
+        'remove', aliases=['r', 'rm', 'del'],
+        help="Remove an existing project.")
     arger_proj_r.set_defaults(func=remove_project)
 
     # tasks (instead of editing the tasks store directly)
@@ -587,8 +564,10 @@ def status(args):
     return 0
 
 
+# Project subcommands
 def list_projects(args):
     frontend.list_projects(args.verbose)
+
 
 def add_project(args):
     print("Adding a project...")
@@ -600,16 +579,17 @@ def add_project(args):
     session.projects.append(project)
     print("The project '{}' has been added successfully.".format(project))
 
+
 def remove_project(args):
     print("Removing a project...")
     project = frontend.get_project(False)
     # Remove the project.
     session.remove_project(project)
     print(("The project '{}' and all dependent tasks have been "
-            "successfully removed.")\
-            .format(project))
+           "successfully removed.").format(project))
 
 
+# Task subcommands
 def list_tasks(args):
     frontend.list_tasks(args.verbose)
 
@@ -619,7 +599,7 @@ def add_task(args):
     task = frontend.get_task()
     session.tasks.append(task)
     print("The task '{}' has been added successfully."\
-            .format(str(task).lstrip()))
+          .format(str(task).lstrip()))
 
 
 def modify_task(args):
@@ -630,7 +610,7 @@ def modify_task(args):
         print("Setting {attr} to {val!s}...".format(attr=attr, val=val))
         task.__setattr__(attr, val)
         print("The task has been succesfully updated:\n  {task!s}"\
-                .format(task=task))
+              .format(task=task))
 
 
 def remove_task(args):
@@ -655,13 +635,13 @@ if __name__ == "__main__":
     # module, and second time when imported by other modules. Therefore, any
     # globals that should be visible when imported have to be explicitly
     # assigned here. Solution inspired by
-    # http://codebright.wordpress.com/2011/06/15/globals-and-__main__-a-python-gotcha/.
+    # http://codebright.wordpress.com/2011/06/15/\
+    # globals-and-__main__-a-python-gotcha/.
     import wyrdin
     wyrdin.session = session
 
     # Do imports that depend on an existing session.
     from task import Task
-    from util import format_timedelta, group_by
     from worktime import WorkSlot
 
     # Read data.

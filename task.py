@@ -115,7 +115,7 @@ class Event(StateOrEvent):
     slots = {'id': {'type': int, 'editable': False},
              'name': {'type': str, 'editable': True},
              'enables': {'type': list, 'editable': True},
-            }
+             }
     """
     - name: name of the event
     - enables: a grouping of soes this event enables when finished
@@ -150,7 +150,7 @@ class Task(Event):
                   'time': {'type': timedelta, 'editable': True},
                   'deadline': {'type': datetime, 'editable': True},
                   'prerequisites': {'type': SoeGrouping, 'editable': True},
-                 })
+                  })
     """
     - project: name of the project (to be changed to a reference to the related
                project object in future)
@@ -203,7 +203,6 @@ class Task(Event):
 
     def __repr__(self):
         return str(self)
-
 
     def short_repr(self):
         return 't{id}'.format(id=self.id)

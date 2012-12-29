@@ -16,17 +16,17 @@ from functools import lru_cache
 
 from datetime import datetime, timedelta, timezone
 from worktime import Interval, dayend, daystart
-from grouping import SoeGrouping, AndGroup, OrGroup, ListGroup
+from grouping import SoeGrouping
 
 
 _dashes_rx = re.compile('-+')
 _float_subrx = r'(?:-\s*)?(?:\d+(?:\.\d+)?|\.\d+)'
 _timedelta_rx = re.compile((r'\W*?(?:({flt})\s*d(?:ays?\W+)?\W*?)?'
-                        r'(?:({flt})\s*h(?:(?:ou)?rs?\W+)?\W*?)?'
-                        r'(?:({flt})\s*m(?:in(?:ute)?s?\W+)?\W*?)?'
-                        r'(?:({flt})\s*s(?:ec(?:ond)?s?)?\W*?)?$')\
-                            .format(flt=_float_subrx),
-                        re.IGNORECASE)
+                            r'(?:({flt})\s*h(?:(?:ou)?rs?\W+)?\W*?)?'
+                            r'(?:({flt})\s*m(?:in(?:ute)?s?\W+)?\W*?)?'
+                            r'(?:({flt})\s*s(?:ec(?:ond)?s?)?\W*?)?$')\
+                           .format(flt=_float_subrx),
+                           re.IGNORECASE)
 
 
 def parse_datetime(dtstr, tz=None, exact=False, orig_val=None, **kwargs):
@@ -50,8 +50,8 @@ def parse_datetime(dtstr, tz=None, exact=False, orig_val=None, **kwargs):
     # Try to use some keywords.
     keywords = [(re.compile(r"^\s*(?:the\s+)?end\s+of\s+(?:the\s+)?"
                             r"world(?:\s+(?:20|')12)?$"),
-                    datetime(year=2012, month=12, day=21,
-                             hour=11, minute=11, tzinfo=timezone.utc))]
+                 datetime(year=2012, month=12, day=21,
+                          hour=11, minute=11, tzinfo=timezone.utc))]
     lower = dtstr.lower().strip()
     for keyword, dt in keywords:
         if keyword.match(lower):
@@ -65,7 +65,7 @@ def parse_datetime(dtstr, tz=None, exact=False, orig_val=None, **kwargs):
             exact_dt = datetime.now(tz) + parse_timedelta(dtstr)
         except ValueError:
             raise ValueError('Could not parse datetime from "{arg}".'\
-                            .format(arg=dtstr))
+                             .format(arg=dtstr))
 
     # Try to supply the timezone from the original value.
     if (exact_dt.tzinfo is None and orig_val is not None
@@ -93,7 +93,7 @@ def parse_timedelta(timestr, **kwargs):
                     val = float(grp_str)
                 except ValueError:
                     raise ValueError('Could not parse float from {grp}.'\
-                        .format(grp=grp_str))
+                                     .format(grp=grp_str))
             else:
                 val = 0
             vals.append(val)
@@ -112,7 +112,7 @@ def parse_timedelta(timestr, **kwargs):
             return timedelta(minutes=float(timestr))
         except ValueError:
             raise ValueError('Could not parse duration from "{arg}".'\
-                            .format(arg=timestr))
+                             .format(arg=timestr))
 
 
 def parse_interval(ivalstr, tz=None, exact=False, **kwargs):
@@ -148,6 +148,7 @@ def parse_grouping(grpstr, **kwargs):
     tokens = list()
     # TODO Continue here.
     raise NotImplementedError('Implement parse_grouping.')
+    len(tokens)
 
 
 _type2parser = {datetime: parse_datetime,

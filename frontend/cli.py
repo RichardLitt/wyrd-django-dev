@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 #-*- coding: utf-8 -*-
-# This code is mostly PEP8-compliant. See
-# http://www.python.org/dev/peps/pep-0008/.
+# This code is PEP8-compliant. See http://www.python.org/dev/peps/pep-0008/.
 """
 
 Wyrd In: Time tracker and task manager
@@ -92,7 +91,8 @@ class Cli(object):
                     task = str2task[taskname]
             if task is None:
                 # Create a new task, asking for optional details.
-                project = Cli.get_project(prompt="What project does it belong to?")
+                project = Cli.get_project(
+                    prompt="What project does it belong to?")
                 task = Task(taskname, project)
                 if ask_details:
                     print("Estimated time?")
@@ -149,8 +149,8 @@ class Cli(object):
         msg_choose_ex = "You can choose from the existing projects."
         msg_choose_emp = ("You can also use an empty string, meaning no "
                           "project.")
-        while (project or not accept_empty) \
-              and project not in session.projects:
+        while ((project or not accept_empty)
+               and project not in session.projects):
             if project != "?":
                 if not project and not accept_empty:
                     print("You have to select one of the defined projects.")
@@ -185,7 +185,8 @@ class Cli(object):
     def get_workslot():
         task = Cli.get_task(ask_details=False)
         start = Cli.get_datetime("What was the start time?")
-        end = Cli.get_datetime("What was the end time?", (lambda end: end >= start))
+        end = Cli.get_datetime("What was the end time?",
+                               (lambda end: end >= start))
         return WorkSlot(task=task, start=start, end=end)
 
     @staticmethod
@@ -212,8 +213,8 @@ class Cli(object):
                 except AttributeError:
                     val = None
                 print ("    {attr: >13}".format(attr=attr) +
-                    ('  ("{val!s}")'.format(val=val)
-                        if val is not None else ''))
+                       ('  ("{val!s}")'.format(val=val)
+                           if val is not None else ''))
             instr = input("> ").strip()
             if instr in Task.slots:
                 attr = instr
@@ -268,10 +269,9 @@ class Cli(object):
                     except AttributeError:
                         continue
                     print("      {attr: >13}: {val!s}"\
-                            .format(attr=attr, val=val))
+                          .format(attr=attr, val=val))
                 print("")
         else:
             for task in sorted(session.tasks):
                 print("    {}".format(task))
         print("")
-

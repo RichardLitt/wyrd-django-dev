@@ -11,8 +11,7 @@ https://github.com/WyrdIn
 This module implements classes related to time definitions.
 
 """
-import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from backend.generic import DBObject
 
@@ -38,8 +37,8 @@ class Interval(object):
 
     def __init__(self, start=None, end=None):
         """Initialises the object."""
-        if not (start is None or isinstance(start, datetime)) \
-           or not (end is None or isinstance(end, datetime)):
+        if (not (start is None or isinstance(start, datetime))
+                or not (end is None or isinstance(end, datetime))):
             raise TypeError('The `start\' and `end\' arguments have to '
                             'be a `datetime\' instance or None.')
         if start and end and start > end:
@@ -67,12 +66,12 @@ class Interval(object):
             self.end = self.start + newlength
 
     def intersects(self, other):
-        start_after_other_end = self.start is not None \
-                                and other.end is not None \
-                                and self.start > other.end
-        end_before_other_start = self.end is not None \
-                                 and other.start is not None \
-                                 and self.end < other.start
+        start_after_other_end = (self.start is not None
+                                 and other.end is not None
+                                 and self.start > other.end)
+        end_before_other_start = (self.end is not None
+                                  and other.start is not None
+                                  and self.end < other.start)
         return not start_after_other_end and not end_before_other_start
 
     def includes(self, dt):
