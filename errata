@@ -1,15 +1,19 @@
 Errata:
 
 x64 architectures:
+==================
 	pytz module initialisation error(ref:Bug #665913)
 
 Description:
+============
 After initial pyton3 installation in host system. In CLI,
 Traceback (most recent call last):
   File "wyrdin.py", line 15, in <module>
     import pytz
 ImportError: No module named pytz
 
-Host details:
+Additional infos:
+=================
+Host System:
 Linux ubuntu 3.2.0-23-generic-pae #36-Ubuntu SMP Tue Apr 10 22:19:09 UTC 2012 i686 i686 i386 GNU/Linux
 
