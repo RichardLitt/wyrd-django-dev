@@ -3,8 +3,19 @@ wyrd-core
 
 The core part of the program
 
+## Installation
 
-## Files:
+Nothing is needed to install the program, just pulling it from the repo.
+However, it has a few prerequisites in order to run:
+
+* python 3
+* python modules:
+	* pytz (http://pytz.sourceforge.net/)
+	* lxml (http://lxml.de)
+	* (argparse; this one should be part of the python distribution)
+
+
+## Files
 
 <dl>
 <dt>deadline.py</dt>
