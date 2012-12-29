@@ -12,6 +12,7 @@ understood as a mapping from strings to Python objects.
 
 """
 import re
+from functools import lru_cache
 
 from datetime import datetime, timedelta, timezone
 from worktime import Interval, dayend, daystart
@@ -154,6 +155,17 @@ _type2parser = {datetime: parse_datetime,
                 SoeGrouping: parse_grouping}
 
 
+@lru_cache(maxsize=5)
+def default_parser(type_):
+    """Provides a default parser, especially for built-in types -- throws away
+    all arguments from a parser call but the first one.
+
+    """
+    def type_parser(instr, *args, **kwargs):
+        return type_(instr)
+    return type_parser
+
+
 def get_parser(type_):
     """Returns a parser for the given type. Parsers convert strings into
     objects of that type.
@@ -161,4 +173,4 @@ def get_parser(type_):
     """
     # Try to find a defined parser for the type. In case none is defined,
     # return the type itself, as in int("8").
-    return _type2parser.get(type_, type_)
+    return _type2parser.get(type_, default_parser(type_))

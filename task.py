@@ -215,5 +215,3 @@ class Task(Event):
     @done.setter
     def done(self, newval):
         self._done = newval
-
-

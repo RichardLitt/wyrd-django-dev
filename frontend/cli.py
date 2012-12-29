@@ -232,12 +232,15 @@ class Cli(object):
         value = None
         attr_type = Task.slots[attr]['type']
         parser = get_parser(attr_type)
-        orig_val = task.__dict__.get(attr, None)
+        try:
+            orig_val = task.__getattribute__(attr)
+        except AttributeError:
+            orig_val = None
         while value is None:
             value = input("> ")
             # Check the type of the value.
             try:
-                value = parser(value, orig=orig_val)
+                value = parser(value, orig_val=orig_val)
             except:
                 value = None
         return attr, value
@@ -255,11 +258,17 @@ class Cli(object):
         # TODO Say when the tasks were worked on.
         print("List of current tasks:")
         if verbose:
+            # Remove name, id from slots.
+            slots = [slot for slot in Task.slots if slot not in ('id', 'name')]
             for task in sorted(session.tasks):
                 print("    {}".format(task.name))
-                for attr in task.__dict__:
-                    print("      {attr: >10}: {val!s}".format(attr=attr,
-                                                              val=val))
+                for attr in slots:
+                    try:
+                        val = task.__getattribute__(attr)
+                    except AttributeError:
+                        continue
+                    print("      {attr: >13}: {val!s}"\
+                            .format(attr=attr, val=val))
                 print("")
         else:
             for task in sorted(session.tasks):

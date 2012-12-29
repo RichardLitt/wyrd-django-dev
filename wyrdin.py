@@ -9,9 +9,11 @@ https://github.com/WyrdIn
 
 """
 import argparse
+from contextlib import contextmanager
 import datetime
 import os.path
 import pytz
+from shutil import copy2, move
 
 from nlp.parsers import parse_timedelta, parse_interval
 
@@ -35,6 +37,28 @@ class ClArgs():
     pass
 
 _cl_args = ClArgs()
+
+
+# Utility functions.
+@contextmanager
+def open_backed_up(fname, mode='r', suffix='~'):
+    # If the file does not exist, create it.
+    if not os.path.exists(fname):
+        open(fname, 'w').close()
+        bak_fname = None
+    # If it does exist, create a backup.
+    else:
+        bak_fname = fname + suffix
+        copy2(fname, bak_fname)
+    try:
+        f = open(fname, mode)
+        yield f
+    except Exception as e:
+        if bak_fname is not None:
+            move(bak_fname, fname)
+        raise e
+    # Closing.
+    f.close()
 
 
 class Session(object):
@@ -99,8 +123,9 @@ class Session(object):
         """
         if infname is None:
             infname = self.config['PROJECTS_FNAME']
-        with open(infname) as infile:
-            self.projects = sorted([proj.rstrip('\n') for proj in infile])
+        if os.path.exists(infname):
+            with open(infname) as infile:
+                self.projects = sorted([proj.rstrip('\n') for proj in infile])
 
     def write_projects(self, outfname=None):
         """Writes the list of projects into a file.
@@ -117,7 +142,8 @@ class Session(object):
             print("")
         if outfname is None:
             outfname = self.config['PROJECTS_FNAME']
-        with open(outfname, 'w') as outfile:
+        with open_backed_up(outfname, 'w',
+                            suffix=self.config['BACKUP_SUFFIX']) as outfile:
             for project in self.projects:
                 outfile.write(project + '\n')
 
@@ -132,6 +158,9 @@ class Session(object):
         if infname is None:
             infname = self.config['TASKS_FNAME_IN']
             inftype = self.config['TASKS_FTYPE_IN']
+        # If no tasks have been written yet, don't load any.
+        if not os.path.exists(infname):
+            return
         # This is a primitive implementation for the backend as a CSV.
         if inftype == FTYPE_CSV:
             import csv
@@ -188,7 +217,9 @@ class Session(object):
         elif outftype == FTYPE_XML:
             from backend.xml import XmlBackend
             mode = 'r+b' if self._xml_header_written else 'wb'
-            with open(outfname, mode) as outfile:
+            with open_backed_up(outfname, mode,
+                                suffix=self.config['BACKUP_SUFFIX']) \
+                    as outfile:
                 if self._xml_header_written:
                     # Skip before the last line (assumed to read
                     # "</wyrdinData>").
@@ -203,7 +234,9 @@ class Session(object):
                 self._xml_header_written = True
         elif outftype == FTYPE_PICKLE:
             import pickle
-            with open(outfname, 'wb') as outfile:
+            with open_backed_up(outfname, 'wb',
+                                suffix=self.config['BACKUP_SUFFIX']) \
+                    as outfile:
                 for task in self.tasks:
                     pickle.dump(task, outfile)
                 for group in self.groups:
@@ -220,6 +253,9 @@ class Session(object):
         if infname is None:
             infname = self.config['LOG_FNAME_IN']
             inftype = self.config['LOG_FTYPE_IN']
+        # If no work slots have been written to the file yet, do not load any.
+        if not os.path.exists(infname):
+            return
         if inftype == FTYPE_PICKLE:
             import pickle
             if not os.path.exists(infname):
@@ -255,7 +291,9 @@ class Session(object):
             # XXX This assumes that `write_log' was called soon after
             # `write_tasks'.
             mode = 'r+b' if self._xml_header_written else 'wb'
-            with open(outfname, mode) as outfile:
+            with open_backed_up(outfname, mode,
+                                suffix=self.config['BACKUP_SUFFIX']) \
+                    as outfile:
                 if self._xml_header_written:
                     # Skip before the last line (assumed to read
                     # "</wyrdinData>").
@@ -275,7 +313,6 @@ class Session(object):
         files as dictated by configuration settings.
 
         """
-        from shutil import copy2, move
         self.write_projects()
         if tasks_ftype is None:
             tasks_ftype = self.config['TASKS_FTYPE_OUT']
@@ -289,19 +326,13 @@ class Session(object):
         if (tasks_ftype == FTYPE_XML and log_ftype == FTYPE_XML
                 and tasks_fname == log_fname):
             from backend.xml import XmlBackend
-            # TODO: Write a context manager (with xxx as yyy: zzz) for writing
-            #       a file with a backup.
-            # TODO: Do this at other places too.
-            # TODO: Handle the case the target file does not exist currently.
-            bak_fname = tasks_fname + self.config['BACKUP_SUFFIX']
-            copy2(tasks_fname, bak_fname)
-            try:
-                with open(tasks_fname, 'wb') as outfile:
-                    XmlBackend.write_all(self.tasks, self.groups, self.wslots,
-                                         outfile)
-            except Exception as e:
-                move(bak_fname, tasks_fname)
-                raise e
+            # TODO: Use the context manager at other places too.
+            with open_backed_up(tasks_fname,
+                                'wb',
+                                suffix=self.config['BACKUP_SUFFIX']) \
+                    as outfile:
+                XmlBackend.write_all(self.tasks, self.groups, self.wslots,
+                                     outfile)
         else:
             # FIXME: The type of file is not looked at, unless the file name is
             # supplied too. Provide some default filename for the supported
@@ -382,8 +413,7 @@ def _init_argparser(arger):
 
     # status (merged with state)
     arger_status = subargers.add_parser('status',
-                                        aliases=['s', 'st', 'stat', 'slots',
-                                                 'log'],
+                                        aliases=['s', 'slots'],
                                         help="Prints out the current status "\
                                              "info.")
     arger_status.set_defaults(func=status)
@@ -402,52 +432,50 @@ def _init_argparser(arger):
     arger_projects = subargers.add_parser('projects',
                                           aliases=['p', 'proj'],
                                           help="Show info about projects.")
-    arger_projects.set_defaults(func=projects)
-    arger_projects.add_argument('-a', '--add',
-                                dest='subcmd',
-                                action='store_const',
-                                const='add',
-                                help="Add a new project.")
-    arger_projects.add_argument('-l', '--list',
-                                dest='subcmd',
-                                action='store_const',
-                                const='list',
-                                help="List defined projects.")
-    arger_projects.add_argument('-r', '--remove',
-                                dest='subcmd',
-                                action='store_const',
-                                const='remove',
-                                help="Remove an existing project.")
-    arger_projects.add_argument('-v', '--verbose', action='store_true',
-                                help="Be verbose.")
+    proj_subargers = arger_projects.add_subparsers()
+    arger_proj_a = proj_subargers.add_parser('add',
+                                             aliases=['a'],
+                                             help="Add a new project.")
+    arger_proj_a.add_argument('-v', '--verbose',
+                              action='store_true',
+                              help="Be verbose.")
+    arger_proj_a.set_defaults(func=add_project)
+    arger_proj_l = proj_subargers.add_parser('list',
+                                             aliases=['l', 'ls'],
+                                             help="List defined projects.")
+    arger_proj_l.add_argument('-v', '--verbose',
+                              action='store_true',
+                              help="Be verbose.")
+    arger_proj_l.set_defaults(func=list_projects)
+    arger_proj_r = proj_subargers.add_parser('remove',
+                                             aliases=['r', 'rm', 'del'],
+                                             help="Remove an existing project.")
+    arger_proj_r.set_defaults(func=remove_project)
 
     # tasks (instead of editing the tasks store directly)
     arger_tasks = subargers.add_parser('tasks',
-                                       aliases=['t', 'tasks'],
+                                       aliases=['t'],
                                        help="Show info about tasks.")
-    arger_tasks.set_defaults(func=tasks)
-    arger_tasks.add_argument('-a', '--add',
-                             dest='subcmd',
-                             action='store_const',
-                             const='add',
-                             help="Add a new task.")
-    arger_tasks.add_argument('-m', '--modify',
-                             dest='subcmd',
-                             action='store_const',
-                             const='modify',
-                             help="Modify an existing task.")
-    arger_tasks.add_argument('-r', '--remove',
-                             dest='subcmd',
-                             action='store_const',
-                             const='remove',
-                             help="Remove an existing task.")
-    arger_tasks.add_argument('-l', '--list',
-                             dest='subcmd',
-                             action='store_const',
-                             const='list',
-                             help="List defined tasks.")
-    arger_tasks.add_argument('-v', '--verbose', action='store_true',
-                             help="Be verbose.")
+    task_subargers = arger_tasks.add_subparsers()
+    arger_tasks_l = task_subargers.add_parser('list',
+                                              aliases=['l', 'ls'],
+                                              help="List defined tasks.")
+    arger_tasks_l.add_argument('-v', '--verbose',
+                               action='store_true',
+                               help="Be verbose.")
+    arger_tasks_l.set_defaults(func=list_tasks)
+    arger_tasks_a = task_subargers.add_parser('add',
+                                              aliases=['a'],
+                                              help="Add a new task.")
+    arger_tasks_a.set_defaults(func=add_task)
+    arger_tasks_m = task_subargers.add_parser('modify',
+                                              aliases=['m', 'mod'],
+                                              help="Modify an existing task.")
+    arger_tasks_m.set_defaults(func=modify_task)
+    arger_tasks_r = task_subargers.add_parser('remove',
+                                              aliases=['r', 'rm', 'del'],
+                                              help="Remove an existing task.")
+    arger_tasks_r.set_defaults(func=remove_task)
 
     return arger
 
@@ -559,78 +587,57 @@ def status(args):
     return 0
 
 
-def projects(args):
+def list_projects(args):
+    frontend.list_projects(args.verbose)
 
-    # Define subcommand functions.
-    def list():
-        frontend.list_projects(args.verbose)
-
-    def add():
-        print("Adding a project...")
-        print("Specify the project name: ")
+def add_project(args):
+    print("Adding a project...")
+    print("Specify the project name: ")
+    project = input("> ")
+    while project in session.projects:
+        print("Sorry, this project name is already used.  Try again: ")
         project = input("> ")
-        while project in session.projects:
-            print("Sorry, this project name is already used.  Try again: ")
-            project = input("> ")
-        session.projects.append(project)
-        print("The project '{}' has been added successfully.".format(project))
+    session.projects.append(project)
+    print("The project '{}' has been added successfully.".format(project))
 
-    def remove():
-        print("Removing a project...")
-        project = frontend.get_project(False)
-        # Remove the project.
-        session.remove_project(project)
-        print(("The project '{}' and all dependent tasks have been "
-              "successfully removed.")\
-              .format(project))
-
-    try:
-        # Call the subcommand function.
-        locals()[args.subcmd]()
-    except KeyError:
-        raise NotImplementedError(
-            'The subcommand `{sub!s}\' is not implemented.'\
-            .format(sub=args.subcmd))
-    return 0
+def remove_project(args):
+    print("Removing a project...")
+    project = frontend.get_project(False)
+    # Remove the project.
+    session.remove_project(project)
+    print(("The project '{}' and all dependent tasks have been "
+            "successfully removed.")\
+            .format(project))
 
 
-def tasks(args):
+def list_tasks(args):
+    frontend.list_tasks(args.verbose)
 
-    # Define subcommand functions.
-    def list():
-        frontend.list_tasks(args.verbose)
 
-    def add():
-        print("Adding a task...")
-        task = frontend.get_task()
-        session.tasks.append(task)
-        print("The task '{}' has been added successfully."\
-              .format(str(task).lstrip()))
+def add_task(args):
+    print("Adding a task...")
+    task = frontend.get_task()
+    session.tasks.append(task)
+    print("The task '{}' has been added successfully."\
+            .format(str(task).lstrip()))
 
-    def modify():
-        print("Modifying a task...")
-        task = frontend.get_task(session.tasks)
-        attr, val = frontend.modify_task(task)
-        if attr in Task.slots:
-            print("Setting {attr} to {val!s}...".format(attr=attr, val=val))
-            task.__setattr__(attr, val)
-            print("The task has been succesfully updated:\n  {task!s}"\
-                  .format(task=task))
 
-    def remove():
-        print("Removing a task...")
-        task = frontend.get_task(session.tasks)
-        session.remove_task(task)
-        print("The task '{}' has been removed successfully.".format(task))
+def modify_task(args):
+    print("Modifying a task...")
+    task = frontend.get_task(session.tasks)
+    attr, val = frontend.modify_task(task)
+    if attr in Task.slots:
+        print("Setting {attr} to {val!s}...".format(attr=attr, val=val))
+        task.__setattr__(attr, val)
+        print("The task has been succesfully updated:\n  {task!s}"\
+                .format(task=task))
 
-    try:
-        # Call the subcommand function.
-        locals()[args.subcmd]()
-    except KeyError:
-        raise NotImplementedError(
-            'The subcommand `{sub!s}\' is not implemented.'\
-            .format(sub=args.subcmd))
-    return 0
+
+def remove_task(args):
+    print("Removing a task...")
+    task = frontend.get_task(session.tasks)
+    session.remove_task(task)
+    print("The task '{}' has been removed successfully.".format(task))
 
 
 # The main program loop.
