@@ -61,6 +61,8 @@ def parse_datetime(dtstr, tz=None, exact=False, orig_val=None, **kwargs):
     # If keywords did not fire, interpret the string as a timedelta and add to
     # datetime.now().
     if exact_dt is None:
+        if tz is None:
+            tz = session.config['TIMEZONE']
         try:
             exact_dt = datetime.now(tz) + parse_timedelta(dtstr)
         except ValueError:

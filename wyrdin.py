@@ -9,9 +9,10 @@ https://github.com/WyrdIn
 
 """
 import argparse
-import datetime
 import os.path
 import pytz
+from datetime import datetime, timedelta
+import time
 
 from nlp.parsers import parse_timedelta, parse_interval
 from util import format_timedelta, group_by, open_backed_up
@@ -58,7 +59,8 @@ class Session(object):
             'LOG_FTYPE_OUT': FTYPE_XML,
             'TIME_FORMAT_USER': '%d %b %Y %H:%M:%S %Z',
             'TIME_FORMAT_REPR': '%Y-%m-%d %H:%M:%S',
-            'TIMEZONE': pytz.utc,
+            'TIMEZONE': time.tzname[time.localtime().tm_isdst],
+            # The default timezone for newly specified time data.
             'BACKUP_SUFFIX': '~',
         }
         # Initialise fields.
@@ -359,7 +361,7 @@ def _init_argparser(arger):
                                        help="To start working on a task.")
     arger_begin.set_defaults(func=begin)
     arger_begin.add_argument('-a', '--adjust',
-                             default=0,
+                             default=timedelta(),
                              metavar='TDELTA',
                              help="Adjust the beginning time by subtracting "
                                   "this much.",
@@ -372,7 +374,7 @@ def _init_argparser(arger):
         help="When you have finished/interrupted work on a task.")
     arger_end.set_defaults(func=end)
     arger_end.add_argument('-a', '--adjust',
-                           default=0,
+                           default=timedelta(),
                            metavar='MIN',
                            help="Adjust the end time by subtracting this "
                                 "much.",
@@ -472,7 +474,7 @@ def print_help(args):
 
 def begin(args):
     task = frontend.get_task()
-    start = datetime.datetime.now(session.config['TIMEZONE']) + args.adjust
+    start = datetime.now(session.config['TIMEZONE']) + args.adjust
     # TODO Make the Session object take care for accounting related to adding
     # work slots, tasks etc.
     session.wslots.append(WorkSlot(task=task, start=start))
@@ -486,7 +488,7 @@ def begin(args):
 
 
 def end(args):
-    end = datetime.datetime.now(session.config['TIMEZONE']) + args.adjust
+    end = datetime.now(session.config['TIMEZONE']) + args.adjust
     open_slots = session.find_open_slots()
     if not open_slots:
         print("You have not told me you have been doing something. Use "
@@ -542,7 +544,7 @@ def status(args):
     else:
         # FIXME Update the message, especially in case when called with --all.
         print("You have been working on the following tasks:")
-        now = datetime.datetime.now(session.config['TIMEZONE'])
+        now = datetime.now(session.config['TIMEZONE'])
         task2slot = group_by(slots, "task", single_attr=True)
         for task in task2slot:
             task_slots = task2slot[task]
@@ -625,12 +627,7 @@ if __name__ == "__main__":
     if DEBUG:
         from pprint import pprint
 
-    # Read arguments and configuration, initiate the user session.
-    arger = argparse.ArgumentParser()
-    _init_argparser(arger)
-    _process_args(arger)
     session = Session()
-    session.read_config(_cl_args)
     # A python gotcha -- the main module gets loaded twice, once as the main
     # module, and second time when imported by other modules. Therefore, any
     # globals that should be visible when imported have to be explicitly
@@ -640,7 +637,13 @@ if __name__ == "__main__":
     import wyrdin
     wyrdin.session = session
 
-    # Do imports that depend on an existing session.
+    # Read arguments and configuration, initiate the user session.
+    arger = argparse.ArgumentParser()
+    _init_argparser(arger)
+    _process_args(arger)
+    session.read_config(_cl_args)
+
+    # Do imports that depend on a configured session.
     from task import Task
     from worktime import WorkSlot
 

@@ -18,8 +18,8 @@ from shutil import copy2, move
 @contextmanager
 def open_backed_up(fname, mode='r', suffix='~'):
     """A context manager for opening a file with a backup. If an exception is
-    raised during writing the file, it is restored from the backup before the
-    exception is reraised.
+    raised during manipulating the file, the file is restored from the backup
+    before the exception is reraised.
 
     Keyword arguments:
         - fname: path towards the file to be opened
