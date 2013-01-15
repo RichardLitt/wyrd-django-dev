@@ -10,6 +10,40 @@ https://github.com/WyrdIn
 This module collects rather universal utility functions.
 
 """
+from contextlib import contextmanager
+import os.path
+from shutil import copy2, move
+
+
+@contextmanager
+def open_backed_up(fname, mode='r', suffix='~'):
+    """A context manager for opening a file with a backup. If an exception is
+    raised during manipulating the file, the file is restored from the backup
+    before the exception is reraised.
+
+    Keyword arguments:
+        - fname: path towards the file to be opened
+        - mode: mode of opening the file (passed on to open()) (default: "r")
+        - suffix: the suffix to use for the backup file (default: "~")
+
+    """
+    # If the file does not exist, create it.
+    if not os.path.exists(fname):
+        open(fname, 'w').close()
+        bak_fname = None
+    # If it does exist, create a backup.
+    else:
+        bak_fname = fname + suffix
+        copy2(fname, bak_fname)
+    try:
+        f = open(fname, mode)
+        yield f
+    except Exception as e:
+        if bak_fname is not None:
+            move(bak_fname, fname)
+        raise e
+    # Closing.
+    f.close()
 
 
 def group_by(objects, attrs, single_attr=False):
@@ -45,5 +79,9 @@ def group_by(objects, attrs, single_attr=False):
 
 
 def format_timedelta(timedelta):
-     whole_repr = str(timedelta) + '.'
-     return whole_repr[:whole_repr.find('.')]
+    """Formats a timedelta object to a string by throwing off the microsecond
+    part from the standard timedelta string representation.
+
+    """
+    whole_repr = str(timedelta) + '.'
+    return whole_repr[:whole_repr.find('.')]

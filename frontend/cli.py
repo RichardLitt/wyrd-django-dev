@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 #-*- coding: utf-8 -*-
-# This code is mostly PEP8-compliant. See
-# http://www.python.org/dev/peps/pep-0008/.
+# This code is PEP8-compliant. See http://www.python.org/dev/peps/pep-0008/.
 """
 
 Wyrd In: Time tracker and task manager
@@ -11,16 +10,19 @@ https://github.com/WyrdIn
 """
 from collections import Mapping
 
-from worktime import parse_delta, parse_datetime, WorkSlot
+from nlp.parsers import parse_timedelta, parse_datetime, get_parser
 from task import Task
+from worktime import WorkSlot
+from wyrdin import session
 
 
-# TODO: Inherit from IFrontend (to be implemented).
+# TODO: Inherit from IFrontend (to be implemented) once alternatives are
+# programmed.
 class Cli(object):
     """ Basic command-line user interface. """
 
     @staticmethod
-    def get_task(session, selection=None, ask_details=True):
+    def get_task(selection=None, ask_details=True):
         """ Asks the user for a task from a given selection or a new one.
 
         Keyword arguments:
@@ -90,7 +92,7 @@ class Cli(object):
             if task is None:
                 # Create a new task, asking for optional details.
                 project = Cli.get_project(
-                    session, prompt="What project does it belong to?")
+                    prompt="What project does it belong to?")
                 task = Task(taskname, project)
                 if ask_details:
                     print("Estimated time?")
@@ -98,9 +100,10 @@ class Cli(object):
                     print("Deadline?")
                     deadline = input("> ").strip()
                     if time:
-                        task.time = parse_delta(time)
+                        task.time = parse_timedelta(time)
                     if deadline:
-                        task.deadline = parse_datetime(deadline)
+                        task.deadline = parse_datetime(
+                            deadline, tz=session.config['TIMEZONE'])
         return task
 
     @staticmethod
@@ -126,7 +129,7 @@ class Cli(object):
         print("")
 
     @staticmethod
-    def get_project(session, accept_empty=True, prompt=None):
+    def get_project(accept_empty=True, prompt=None):
         """Solicits a project name from the user.
 
         Keyword arguments:
@@ -146,8 +149,8 @@ class Cli(object):
         msg_choose_ex = "You can choose from the existing projects."
         msg_choose_emp = ("You can also use an empty string, meaning no "
                           "project.")
-        while (project or not accept_empty) \
-              and project not in session.projects:
+        while ((project or not accept_empty)
+               and project not in session.projects):
             if project != "?":
                 if not project and not accept_empty:
                     print("You have to select one of the defined projects.")
@@ -179,11 +182,11 @@ class Cli(object):
         return project
 
     @staticmethod
-    def get_workslot(session):
-        task = Cli.get_task(session, ask_details=False)
-        start = Cli.get_datetime(prompt="What was the start time?")
-        end = Cli.get_datetime(prompt="What was the end time?",
-                               validate=(lambda end: end >= start))
+    def get_workslot():
+        task = Cli.get_task(ask_details=False)
+        start = Cli.get_datetime("What was the start time?")
+        end = Cli.get_datetime("What was the end time?",
+                               (lambda end: end >= start))
         return WorkSlot(task=task, start=start, end=end)
 
     @staticmethod
@@ -193,7 +196,7 @@ class Cli(object):
         while in_dt is None:
             in_str = input("> ").strip()
             try:
-                in_dt = parse_datetime(in_str)
+                in_dt = parse_datetime(in_str, tz=session.config['TIMEZONE'])
             except ValueError as error:
                 print("Error: {err!s}".format(err=error))
         return in_dt
@@ -203,34 +206,48 @@ class Cli(object):
         print("What do you want to change?")
         attr = None
         while attr is None:
-            for attr in Task.slots:
+            for attr in filter(lambda slot: Task.slots[slot]['editable'],
+                               Task.slots):
                 try:
                     val = task.__getattribute__(attr)
                 except AttributeError:
                     val = None
-                print ("    {attr: >10}".format(attr=attr) +
-                    ('  (current value: "{val!s}")'.format(val=val)
-                        if val is not None else ''))
+                print ("    {attr: >13}".format(attr=attr) +
+                       ('  ("{val!s}")'.format(val=val)
+                           if val is not None else ''))
             instr = input("> ").strip()
             if instr in Task.slots:
+                attr = instr
                 break
             else:
-                matching = filter(lambda slot: slot.startswith(instr),
-                                  Task.slots)
+                matching = [slot for slot in Task.slots
+                            if (slot.startswith(instr)
+                                and Task.slots[slot]['editable'])]
                 if len(matching) == 1:
                     attr = matching[0]
                 else:
                     attr = None
-                    print("Sorry, try again.")
+                    print("Sorry, could not unambiguously set the attribute "
+                          "to the value specified. Please, try again.")
         print("Enter the new value.")
         value = None
+        attr_type = Task.slots[attr]['type']
+        parser = get_parser(attr_type)
+        try:
+            orig_val = task.__getattribute__(attr)
+        except AttributeError:
+            orig_val = None
         while value is None:
             value = input("> ")
-            # TODO Validity of this value should be checked.
+            # Check the type of the value.
+            try:
+                value = parser(value, orig_val=orig_val)
+            except:
+                value = None
         return attr, value
 
     @staticmethod
-    def list_projects(session, verbose=False):
+    def list_projects(verbose=False):
         # TODO Implement verbosity.
         print("List of current projects:")
         for project in sorted(session.projects):
@@ -238,18 +255,23 @@ class Cli(object):
         print("")
 
     @staticmethod
-    def list_tasks(session, verbose=False):
+    def list_tasks(verbose=False):
         # TODO Say when the tasks were worked on.
         print("List of current tasks:")
         if verbose:
+            # Remove name, id from slots.
+            slots = [slot for slot in Task.slots if slot not in ('id', 'name')]
             for task in sorted(session.tasks):
                 print("    {}".format(task.name))
-                for attr in task.__dict__:
-                    print("      {attr: >10}: {val!s}".format(attr=attr,
-                                                              val=val))
+                for attr in slots:
+                    try:
+                        val = task.__getattribute__(attr)
+                    except AttributeError:
+                        continue
+                    print("      {attr: >13}: {val!s}"\
+                          .format(attr=attr, val=val))
                 print("")
         else:
             for task in sorted(session.tasks):
                 print("    {}".format(task))
         print("")
-
